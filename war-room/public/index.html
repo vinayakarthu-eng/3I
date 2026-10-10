@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DrillForce War Room</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">🎖️ <span>War Room</span></div>
+      <div class="meta">
+        <span id="modeBadge" class="badge badge-sim">SIMULATOR</span>
+        <span id="scenarioName" class="scenario">No active drill</span>
+        <span id="sevPill" class="sev" hidden></span>
+        <span id="phasePill" class="phase" hidden></span>
+      </div>
+      <div class="timer" id="timer">T+00:00</div>
+      <div class="controls">
+        <select id="scenarioSelect" aria-label="Scenario"></select>
+        <select id="speedSelect" aria-label="Speed">
+          <option value="1">1×</option>
+          <option value="2" selected>2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="startBtn" class="btn btn-go">Start Drill</button>
+        <button id="stopBtn" class="btn btn-stop" disabled>End</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="feed-wrap">
+        <div id="feed" class="feed" aria-live="polite"></div>
+        <form id="chatForm" class="chat">
+          <input id="chatInput" placeholder="Type as a responder… (try: I'll take ops · root cause found · I propose we fail over · all clear · sitrep)" autocomplete="off" />
+          <button class="btn btn-go" type="submit">Send</button>
+        </form>
+      </section>
+
+      <aside class="side">
+        <div class="panel">
+          <h2>Service health</h2>
+          <div id="services" class="services"></div>
+        </div>
+        <div class="panel">
+          <h2>Agent roster</h2>
+          <ul id="roster" class="roster"></ul>
+        </div>
+        <div class="panel">
+          <h2>Inject timeline</h2>
+          <ol id="timeline" class="timeline"></ol>
+        </div>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

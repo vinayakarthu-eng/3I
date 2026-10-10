@@ -1,0 +1,22 @@
+{
+  "name": "drillforce-war-room",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous ICS agents running incident-response drills in a real Slack workspace (headless adapter pattern).",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.21.0",
+    "@slack/web-api": "^7.8.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
