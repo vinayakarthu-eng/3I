@@ -45,6 +45,15 @@ export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 export const COMPETENCY_CATEGORIES = ["technical", "communication", "leadership", "process"] as const;
 export type CompetencyCategory = (typeof COMPETENCY_CATEGORIES)[number];
 
+export const DIFFICULTIES = ["beginner", "intermediate", "advanced"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+};
+
 export interface CompetencyAreaSeed {
   name: string;
   description: string;

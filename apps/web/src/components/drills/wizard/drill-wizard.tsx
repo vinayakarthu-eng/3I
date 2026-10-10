@@ -71,11 +71,13 @@ export function DrillWizard({
   drillId,
   initialValues,
   orgUsers,
+  templates,
 }: {
   mode: "create" | "edit";
   drillId?: string;
   initialValues: DrillFormValues;
   orgUsers: OrgUserOption[];
+  templates?: DrillTemplate[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -199,7 +201,9 @@ export function DrillWizard({
             <CardTitle>{STEPS[step].title}</CardTitle>
             <CardDescription>{STEPS[step].description}</CardDescription>
           </div>
-          {step === 0 && mode === "create" && <TemplateDialog onSelect={applyTemplate} />}
+          {step === 0 && mode === "create" && (
+            <TemplateDialog onSelect={applyTemplate} templates={templates} />
+          )}
         </CardHeader>
         <CardContent>
           {step === 0 && <BasicInfoStep values={values} errors={errors} update={update} />}

@@ -1,4 +1,4 @@
-import { COMPETENCY_AREAS } from "@drillforce/shared";
+import { COMPETENCY_AREAS, DRILL_TEMPLATES } from "@drillforce/shared";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -21,10 +21,29 @@ async function main() {
   await db.execute(sql`
     truncate table
       improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
-      drill_objectives, drill_injects, drills, drill_lifecycle_templates, competency_areas,
-      users, organizations
+      drill_objectives, drill_injects, drills, drill_lifecycle_templates, drill_templates,
+      competency_areas, users, organizations
     restart identity cascade
   `);
+
+  console.log("📚 Creating scenario library…");
+  await db.insert(schema.drillTemplates).values(
+    DRILL_TEMPLATES.map((t, i) => ({
+      id: t.id,
+      name: t.name,
+      sector: t.sector,
+      type: t.type,
+      description: t.description,
+      estimatedDurationMinutes: t.estimatedDurationMinutes,
+      difficulty: t.difficulty,
+      basedOn: t.basedOn,
+      isQuickDrill: t.isQuickDrill,
+      scenario: t.scenario,
+      objectives: t.objectives,
+      competencyAreasTested: t.competencyAreasTested,
+      sortOrder: i,
+    })),
+  );
 
   console.log("🧠 Creating competency areas…");
   const competencyAreas = await db

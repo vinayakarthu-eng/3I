@@ -45,9 +45,9 @@ import { useEffect, useState, type ReactNode } from "react";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/drills", label: "Drills", icon: ClipboardList },
+  { href: "/scenarios", label: "Scenarios", icon: LayoutTemplate },
   { href: "/readiness", label: "Readiness", icon: Activity },
   { href: "/actions", label: "Actions", icon: ListChecks },
-  { href: "/templates", label: "Templates", icon: LayoutTemplate },
   { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;

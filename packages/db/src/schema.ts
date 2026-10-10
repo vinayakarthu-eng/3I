@@ -4,6 +4,7 @@ import {
   ACTION_STATUSES,
   COMPETENCY_CATEGORIES,
   CRITERIA_TYPES,
+  DIFFICULTIES,
   DRILL_STATUSES,
   DRILL_TYPES,
   EVENT_TYPES,
@@ -12,6 +13,7 @@ import {
   SECTORS,
   USER_ROLES,
   type DrillScenario,
+  type ObjectiveDraft,
   type ObjectiveTarget,
 } from "@drillforce/shared";
 import { relations, sql, type AnyColumn, type SQL } from "drizzle-orm";
@@ -83,6 +85,36 @@ export const competencyAreas = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [check("competency_areas_category_check", oneOf(t.category, COMPETENCY_CATEGORIES))],
+);
+
+// ─── drill_templates ──────────────────────────────────────────────────────────
+export const drillTemplates = pgTable(
+  "drill_templates",
+  {
+    /** Stable slug id, e.g. "database-failover". */
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    /** A sector or "general". */
+    sector: text("sector").notNull().default("general"),
+    type: text("type", { enum: DRILL_TYPES }).notNull(),
+    description: text("description").notNull(),
+    estimatedDurationMinutes: integer("estimated_duration_minutes").notNull().default(30),
+    difficulty: text("difficulty", { enum: DIFFICULTIES }).notNull().default("intermediate"),
+    basedOn: text("based_on"),
+    isQuickDrill: boolean("is_quick_drill").notNull().default(false),
+    scenario: jsonb("scenario").$type<DrillScenario>().notNull(),
+    objectives: jsonb("objectives").$type<ObjectiveDraft[]>().notNull().default([]),
+    competencyAreasTested: jsonb("competency_areas_tested")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("drill_templates_type_check", oneOf(t.type, DRILL_TYPES)),
+    check("drill_templates_difficulty_check", oneOf(t.difficulty, DIFFICULTIES)),
+  ],
 );
 
 // ─── drills ─────────────────────────────────────────────────────────────────
@@ -443,3 +475,5 @@ export type DrillInject = typeof drillInjects.$inferSelect;
 export type NewDrillInject = typeof drillInjects.$inferInsert;
 export type CompetencyArea = typeof competencyAreas.$inferSelect;
 export type NewCompetencyArea = typeof competencyAreas.$inferInsert;
+export type DrillTemplateRow = typeof drillTemplates.$inferSelect;
+export type NewDrillTemplateRow = typeof drillTemplates.$inferInsert;

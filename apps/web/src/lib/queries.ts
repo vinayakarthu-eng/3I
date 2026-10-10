@@ -12,6 +12,7 @@ import {
   drillReports,
   drills,
   drillScores,
+  drillTemplates,
   eq,
   improvementActions,
   inArray,
@@ -136,6 +137,15 @@ export async function listDrillInjects(drillId: string) {
     .from(drillInjects)
     .where(eq(drillInjects.drillId, drillId))
     .orderBy(asc(drillInjects.triggerAtMinutes), asc(drillInjects.sortOrder));
+}
+
+export async function listDrillTemplates() {
+  return db.select().from(drillTemplates).orderBy(asc(drillTemplates.sortOrder));
+}
+
+export async function getDrillTemplate(id: string) {
+  const [row] = await db.select().from(drillTemplates).where(eq(drillTemplates.id, id));
+  return row ?? null;
 }
 
 export async function listCompetencyAreas() {

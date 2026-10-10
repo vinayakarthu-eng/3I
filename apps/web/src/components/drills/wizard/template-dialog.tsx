@@ -20,7 +20,13 @@ import {
 import { LayoutTemplate } from "lucide-react";
 import { useState } from "react";
 
-export function TemplateDialog({ onSelect }: { onSelect: (template: DrillTemplate) => void }) {
+export function TemplateDialog({
+  onSelect,
+  templates = DRILL_TEMPLATES,
+}: {
+  onSelect: (template: DrillTemplate) => void;
+  templates?: DrillTemplate[];
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,7 +45,7 @@ export function TemplateDialog({ onSelect }: { onSelect: (template: DrillTemplat
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          {DRILL_TEMPLATES.map((t) => (
+          {templates.map((t) => (
             <button
               key={t.id}
               type="button"

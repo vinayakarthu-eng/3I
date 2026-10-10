@@ -74,3 +74,23 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
 - Decision: period filter is a SQL fragment comparing against an ISO string — the `postgres`
   driver can't bind a JS `Date` against a `coalesce()` expression.
 - `npm run build` passes; `/readiness`, `?period=*`, and `/readiness/[userId]` return 200.
+
+## Phase 4 — Scenario Library + Quick Drills ✅
+
+- **Schema** (migration `0005_hesitant_whirlwind`): `drill_templates` table keyed by a stable
+  slug id, with sector/type/difficulty/duration/based_on/is_quick_drill plus jsonb
+  scenario/objectives/competency_areas_tested.
+- **Library** (`packages/shared/src/templates.ts`): expanded `DRILL_TEMPLATES` to **21** — 15
+  rich scenarios (8 tech, 4 healthcare, 3 public sector) + **6 single-competency quick drills**,
+  each with injects, 2–3 objectives, competencies tested, difficulty, and a real-incident
+  "based_on". Per CLAUDE.md adjustment #2 the templates are seeded into the table (shared TS
+  stays the source of truth).
+- **`/scenarios`**: card grid with sector/type/difficulty badges, duration, competency dots,
+  filters (sector/type/difficulty/competency/duration) + search, a Quick Drills tab, and an
+  expandable detail dialog. "Use Template" → `/drills/new?template=<id>`.
+- **Wizard**: `TemplateDialog` + the new-drill page are now DB-backed; `/drills/new?template=<id>`
+  pre-fills the wizard from the table.
+- `/templates` now redirects to `/scenarios`; sidebar shows **Scenarios**.
+- Decision: template objectives created via the wizard are not auto-mapped to a competency id
+  yet (the form doesn't thread competency through) — they can be set on the Objectives tab.
+- `npm run build` passes; `/scenarios`, `/drills/new?template=*`, `/templates` (307) all OK.
