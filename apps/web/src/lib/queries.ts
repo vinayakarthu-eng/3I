@@ -4,6 +4,7 @@ import {
   count,
   db,
   desc,
+  drillComposites,
   drillObjectives,
   drills,
   drillScores,
@@ -95,6 +96,7 @@ export async function getDrill(orgId: string, id: string) {
       participants: { with: { user: true }, orderBy: (p, { asc }) => [asc(p.role)] },
       events: { orderBy: (e, { asc }) => [asc(e.occurredAt)] },
       scores: { orderBy: (s, { desc }) => [desc(s.scoredAt)] },
+      composite: true,
     },
   });
   if (!drill) return null;
@@ -127,4 +129,21 @@ export async function listOrgUsers(orgId: string) {
     orderBy: (u, { asc }) => [asc(u.name)],
     columns: { id: true, name: true, email: true, role: true },
   });
+}
+
+/** Composite scores of the org's scored drills, oldest first, for trend charts. */
+export async function getScoreTrend(orgId: string) {
+  const rows = await db
+    .select({
+      drillId: drillComposites.drillId,
+      name: drills.name,
+      score: drillComposites.compositeScore,
+      passed: drillComposites.passed,
+      at: sql<Date>`coalesce(${drills.endedAt}, ${drillComposites.computedAt})`,
+    })
+    .from(drillComposites)
+    .innerJoin(drills, eq(drills.id, drillComposites.drillId))
+    .where(eq(drills.orgId, orgId))
+    .orderBy(sql`coalesce(${drills.endedAt}, ${drillComposites.computedAt})`);
+  return rows.map((r) => ({ ...r, score: Number(r.score), at: new Date(r.at) }));
 }

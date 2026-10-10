@@ -189,6 +189,34 @@ export const drillScores = pgTable(
   ],
 );
 
+// ─── drill_composite ────────────────────────────────────────────────────────
+export interface CompositeBreakdown {
+  byCriteria: Partial<Record<string, number>>;
+  objectives: { objectiveId: string; score: number; weight: number }[];
+}
+
+export const drillComposites = pgTable(
+  "drill_composite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .unique()
+      .references(() => drills.id, { onDelete: "cascade" }),
+    compositeScore: numeric("composite_score").notNull(),
+    passThreshold: integer("pass_threshold").notNull().default(70),
+    passed: boolean("passed").notNull(),
+    breakdown: jsonb("breakdown").$type<CompositeBreakdown>().notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "drill_composite_score_range",
+      sql`${t.compositeScore} >= 0 and ${t.compositeScore} <= 100`,
+    ),
+  ],
+);
+
 // ─── improvement_actions ────────────────────────────────────────────────────
 export const improvementActions = pgTable(
   "improvement_actions",
@@ -264,6 +292,11 @@ export const drillsRelations = relations(drills, ({ one, many }) => ({
   events: many(drillEvents),
   scores: many(drillScores),
   improvementActions: many(improvementActions),
+  composite: one(drillComposites, { fields: [drills.id], references: [drillComposites.drillId] }),
+}));
+
+export const drillCompositesRelations = relations(drillComposites, ({ one }) => ({
+  drill: one(drills, { fields: [drillComposites.drillId], references: [drills.id] }),
 }));
 
 export const drillObjectivesRelations = relations(drillObjectives, ({ one, many }) => ({
@@ -310,4 +343,5 @@ export type DrillParticipant = typeof drillParticipants.$inferSelect;
 export type DrillEvent = typeof drillEvents.$inferSelect;
 export type DrillScore = typeof drillScores.$inferSelect;
 export type ImprovementAction = typeof improvementActions.$inferSelect;
+export type DrillComposite = typeof drillComposites.$inferSelect;
 export type DrillLifecycleTemplate = typeof drillLifecycleTemplates.$inferSelect;

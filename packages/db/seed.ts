@@ -19,7 +19,7 @@ async function main() {
   console.log("🧹 Clearing existing data…");
   await db.execute(sql`
     truncate table
-      improvement_actions, drill_scores, drill_events, drill_participants,
+      improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
       drill_objectives, drills, drill_lifecycle_templates, users, organizations
     restart identity cascade
   `);
@@ -241,7 +241,7 @@ async function main() {
     { drillId: completedDrill.id, eventType: "message", actor: participant.id, channel, payload: { text: "Lowering TTLs and updating NS records to secondary provider." }, occurredAt: at(12) },
     { drillId: completedDrill.id, eventType: "message", actor: manager.id, channel, payload: { text: "Status page updated: investigating DNS resolution issues." }, occurredAt: at(18) },
     { drillId: completedDrill.id, eventType: "inject", actor: "bot", channel, payload: { text: "Secondary DNS provider propagation is slower than expected." }, occurredAt: at(20) },
-    { drillId: completedDrill.id, eventType: "message", actor: participant.id, channel, payload: { text: "Propagation verified in 4/5 regions, monitoring error rates." }, occurredAt: at(45) },
+    { drillId: completedDrill.id, eventType: "message", actor: participant.id, channel, payload: { text: "Monitoring error rates across regions, still seeing failures in eu-west." }, occurredAt: at(45) },
     { drillId: completedDrill.id, eventType: "system", actor: "system", channel, payload: { text: "Drill ended" }, occurredAt: at(75) },
   ]);
 
@@ -276,14 +276,25 @@ async function main() {
 
   console.log("📊 Recording scores for completed drill…");
   const [ttaObj, completenessObj, qualityObj] = completedObjectives;
+  const cite = (minute: number, actor: string, text: string) => ({
+    at: at(minute).toISOString(),
+    tPlusMinutes: minute,
+    actor,
+    text,
+  });
   await db.insert(schema.drillScores).values([
     {
       drillId: completedDrill.id,
       objectiveId: ttaObj.id,
       criteriaType: "time_to_action",
-      rawValue: "4",
+      rawValue: "3",
       normalizedScore: "100",
-      evidence: { note: "Incident declared 4 minutes after first inject" },
+      evidence: {
+        note: "First responder action 3 min after the trigger (target 5 min)",
+        trigger: cite(0, "bot", "Synthetic monitors report resolution failures for acme.com."),
+        response: cite(3, participant.id, "Seeing NXDOMAIN from multiple regions, investigating."),
+        targetMinutes: 5,
+      },
       scoredBy: "auto",
       scoredAt: at(80),
     },
@@ -293,7 +304,15 @@ async function main() {
       criteriaType: "completeness",
       rawValue: "3",
       normalizedScore: "75",
-      evidence: { matched: ["Lower TTLs", "Update NS records", "Monitor error rates"], missing: ["Verify propagation (partial)"] },
+      evidence: {
+        note: "3 of 4 checklist items observed",
+        matched: [
+          { item: "Lower TTLs", event: cite(12, participant.id, "Lowering TTLs and updating NS records to secondary provider.") },
+          { item: "Update NS records", event: cite(12, participant.id, "Lowering TTLs and updating NS records to secondary provider.") },
+          { item: "Monitor error rates", event: cite(45, participant.id, "Monitoring error rates across regions, still seeing failures in eu-west.") },
+        ],
+        missing: ["Verify propagation"],
+      },
       scoredBy: "auto",
       scoredAt: at(80),
     },
@@ -302,12 +321,89 @@ async function main() {
       objectiveId: qualityObj.id,
       criteriaType: "quality",
       rawValue: "3.3",
-      normalizedScore: "66",
-      evidence: { Clarity: 4, Timeliness: 3, Accuracy: 3, note: "Status page update came 18 minutes in" },
+      normalizedScore: "66.7",
+      evidence: {
+        ratings: [
+          { dimension: "Clarity", rating: 4, scale: 5 },
+          { dimension: "Timeliness", rating: 3, scale: 5 },
+          { dimension: "Accuracy", rating: 3, scale: 5 },
+        ],
+        notes: "Status page update came 18 minutes in and didn't mention the workaround.",
+      },
       scoredBy: manager.id,
       scoredAt: at(120),
     },
   ]);
+  await db.insert(schema.drillComposites).values({
+    drillId: completedDrill.id,
+    compositeScore: "86.1",
+    passThreshold: 70,
+    passed: true,
+    breakdown: {
+      byCriteria: { time_to_action: 100, completeness: 75, quality: 66.7 },
+      objectives: [
+        { objectiveId: ttaObj.id, score: 100, weight: 3 },
+        { objectiveId: completenessObj.id, score: 75, weight: 2 },
+        { objectiveId: qualityObj.id, score: 66.7, weight: 1 },
+      ],
+    },
+    computedAt: at(120),
+  });
+
+  console.log("🗂  Creating historical drills for trends…");
+  const history = [
+    { name: "Ransomware Tabletop", type: "tabletop" as const, daysAgo: 75, scores: [55, 70], weights: [2, 1] },
+    { name: "Region Evacuation", type: "functional" as const, daysAgo: 45, scores: [80, 65], weights: [2, 1] },
+  ];
+  for (const h of history) {
+    const startedAt = daysFromNow(-h.daysAgo);
+    const endedAt = new Date(startedAt.getTime() + 90 * MIN);
+    const [d] = await db
+      .insert(schema.drills)
+      .values({
+        orgId: org.id,
+        name: h.name,
+        type: h.type,
+        status: "completed",
+        description: `Historical ${h.name.toLowerCase()} exercise.`,
+        scheduledAt: startedAt,
+        startedAt,
+        endedAt,
+        createdBy: admin.id,
+      })
+      .returning();
+    const objs = await db
+      .insert(schema.drillObjectives)
+      .values([
+        { drillId: d.id, description: "Initial response within 10 minutes", criteriaType: "time_to_action", targetValue: { max_minutes: 10 }, weight: h.weights[0], sortOrder: 0 },
+        { drillId: d.id, description: "Leadership briefed accurately", criteriaType: "accuracy", targetValue: { expected_outcome: "Leadership receives an accurate impact summary within 30 minutes." }, weight: h.weights[1], sortOrder: 1 },
+      ])
+      .returning();
+    await db.insert(schema.drillScores).values(
+      objs.map((o, i) => ({
+        drillId: d.id,
+        objectiveId: o.id,
+        criteriaType: o.criteriaType,
+        normalizedScore: String(h.scores[i]),
+        evidence: { note: "Imported from a previous exercise" },
+        scoredBy: manager.id,
+        scoredAt: endedAt,
+      })),
+    );
+    const composite = Math.round(((h.scores[0] * h.weights[0] + h.scores[1] * h.weights[1]) / (h.weights[0] + h.weights[1])) * 10) / 10;
+    await db.insert(schema.drillComposites).values({
+      drillId: d.id,
+      compositeScore: String(composite),
+      passThreshold: 70,
+      passed: composite >= 70,
+      breakdown: {
+        byCriteria: { time_to_action: h.scores[0], accuracy: h.scores[1] },
+        objectives: objs.map((o, i) => ({ objectiveId: o.id, score: h.scores[i], weight: o.weight })),
+      },
+      computedAt: endedAt,
+    });
+    await db.insert(schema.drillEvents).values(statusChange(d.id, "debriefing", "completed", endedAt, admin.id));
+  }
 
   console.log("🛠  Creating improvement actions…");
   await db.insert(schema.improvementActions).values([
