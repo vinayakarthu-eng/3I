@@ -425,6 +425,12 @@ function ScoreResults({
                 Generate AAR
               </Link>
             </Button>
+            <Button asChild variant="outline" size="sm" className="w-full">
+              <Link href={`/drills/${drill.id}/report`}>
+                <FileText className="h-4 w-4" />
+                Full Report
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 

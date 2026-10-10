@@ -113,3 +113,23 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
   placeholder, signature lines) with a Print button.
 - Earned certifications now appear on the readiness profile; sidebar shows **Certifications**.
 - `npm run build` passes; `/certifications` and the certificate route return 200.
+
+## Phase 6 — Reports + Compliance Evidence ✅
+
+- **Schema** (migration `0007_powerful_stephen_strange`): `compliance_frameworks`,
+  `compliance_requirements` (clause/description/evidence_type + a small `config` jsonb for
+  threshold/competency/minDrills), and `drill_compliance_evidence` (status + evidence jsonb).
+- **Shared**: `COMPLIANCE_FRAMEWORKS` (ISO 27001, DORA, SOC 2, NIST CSF with ~11 clauses) +
+  status/evidence-type enums.
+- **Engine** (`packages/db/src/compliance.ts`): `evaluateDrillCompliance` maps a scored drill's
+  composite / competency averages / participant certs / org drill frequency onto each
+  requirement (met/partial/not_met); `evaluateOrgCompliance` backfills all scored drills.
+  Hooked into the scoring actions (runs on finalize) and the seed.
+- **`/drills/[id]/report`**: three tabs — Tactical Debrief (timeline, did-well, to-practice,
+  this-drill-vs-team per competency), Executive Summary (composite, pass/fail, top strengths/gaps,
+  risk impact, next steps), and Compliance Evidence (per-framework clause tables). Print button +
+  link to the existing AAR (CLAUDE.md adjustment #4).
+- **`/compliance`**: framework tabs, per-framework compliance score, requirements table
+  (status / last evidence / evidence count), print/export. Sidebar shows **Compliance**.
+- Scores tab links to the Full Report.
+- `npm run build` passes; `/compliance` and all report tabs return 200.

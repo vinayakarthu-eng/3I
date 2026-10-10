@@ -4,6 +4,8 @@ import {
   ACTION_STATUSES,
   CERT_STATUSES,
   COMPETENCY_CATEGORIES,
+  COMPLIANCE_EVIDENCE_TYPES,
+  COMPLIANCE_STATUSES,
   CRITERIA_TYPES,
   DIFFICULTIES,
   DRILL_STATUSES,
@@ -14,6 +16,7 @@ import {
   SECTORS,
   USER_ROLES,
   type CertRequirements,
+  type ComplianceReqConfig,
   type DrillScenario,
   type ObjectiveDraft,
   type ObjectiveTarget,
@@ -386,6 +389,55 @@ export const userCertifications = pgTable(
   ],
 );
 
+// ─── compliance ───────────────────────────────────────────────────────────────
+export const complianceFrameworks = pgTable("compliance_frameworks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const complianceRequirements = pgTable(
+  "compliance_requirements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    frameworkId: text("framework_id")
+      .notNull()
+      .references(() => complianceFrameworks.id, { onDelete: "cascade" }),
+    clause: text("clause").notNull(),
+    description: text("description").notNull(),
+    evidenceType: text("evidence_type", { enum: COMPLIANCE_EVIDENCE_TYPES }).notNull(),
+    config: jsonb("config").$type<ComplianceReqConfig>().notNull().default({}),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("compliance_requirements_framework_id_idx").on(t.frameworkId),
+    check("compliance_requirements_evidence_type_check", oneOf(t.evidenceType, COMPLIANCE_EVIDENCE_TYPES)),
+  ],
+);
+
+export const drillComplianceEvidence = pgTable(
+  "drill_compliance_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => drills.id, { onDelete: "cascade" }),
+    requirementId: uuid("requirement_id")
+      .notNull()
+      .references(() => complianceRequirements.id, { onDelete: "cascade" }),
+    status: text("status", { enum: COMPLIANCE_STATUSES }).notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    assessedAt: timestamp("assessed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("drill_compliance_evidence_drill_id_idx").on(t.drillId),
+    index("drill_compliance_evidence_requirement_id_idx").on(t.requirementId),
+    check("drill_compliance_evidence_status_check", oneOf(t.status, COMPLIANCE_STATUSES)),
+  ],
+);
+
 // ─── drill_lifecycle_templates ──────────────────────────────────────────────
 export interface LifecycleStage {
   id: string;
@@ -472,6 +524,26 @@ export const userCertificationsRelations = relations(userCertifications, ({ one 
   }),
 }));
 
+export const complianceFrameworksRelations = relations(complianceFrameworks, ({ many }) => ({
+  requirements: many(complianceRequirements),
+}));
+
+export const complianceRequirementsRelations = relations(complianceRequirements, ({ one, many }) => ({
+  framework: one(complianceFrameworks, {
+    fields: [complianceRequirements.frameworkId],
+    references: [complianceFrameworks.id],
+  }),
+  evidence: many(drillComplianceEvidence),
+}));
+
+export const drillComplianceEvidenceRelations = relations(drillComplianceEvidence, ({ one }) => ({
+  drill: one(drills, { fields: [drillComplianceEvidence.drillId], references: [drills.id] }),
+  requirement: one(complianceRequirements, {
+    fields: [drillComplianceEvidence.requirementId],
+    references: [complianceRequirements.id],
+  }),
+}));
+
 export const drillParticipantsRelations = relations(drillParticipants, ({ one }) => ({
   drill: one(drills, { fields: [drillParticipants.drillId], references: [drills.id] }),
   user: one(users, { fields: [drillParticipants.userId], references: [users.id] }),
@@ -524,3 +596,6 @@ export type NewDrillTemplateRow = typeof drillTemplates.$inferInsert;
 export type Certification = typeof certifications.$inferSelect;
 export type UserCertification = typeof userCertifications.$inferSelect;
 export type NewUserCertification = typeof userCertifications.$inferInsert;
+export type ComplianceFramework = typeof complianceFrameworks.$inferSelect;
+export type ComplianceRequirement = typeof complianceRequirements.$inferSelect;
+export type DrillComplianceEvidence = typeof drillComplianceEvidence.$inferSelect;

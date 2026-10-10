@@ -1,5 +1,11 @@
-import { CERTIFICATIONS, COMPETENCY_AREAS, DRILL_TEMPLATES } from "@drillforce/shared";
+import {
+  CERTIFICATIONS,
+  COMPETENCY_AREAS,
+  COMPLIANCE_FRAMEWORKS,
+  DRILL_TEMPLATES,
+} from "@drillforce/shared";
 import { awardCertifications } from "./src/certifications";
+import { evaluateOrgCompliance } from "./src/compliance";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -23,9 +29,31 @@ async function main() {
     truncate table
       improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
       drill_objectives, drill_injects, drills, drill_lifecycle_templates, drill_templates,
-      user_certifications, certifications, competency_areas, users, organizations
+      user_certifications, certifications, drill_compliance_evidence, compliance_requirements,
+      compliance_frameworks, competency_areas, users, organizations
     restart identity cascade
   `);
+
+  console.log("📐 Creating compliance frameworks…");
+  for (const [i, fw] of COMPLIANCE_FRAMEWORKS.entries()) {
+    await db.insert(schema.complianceFrameworks).values({
+      id: fw.id,
+      name: fw.name,
+      version: fw.version,
+      description: fw.description,
+      sortOrder: i,
+    });
+    await db.insert(schema.complianceRequirements).values(
+      fw.requirements.map((r, j) => ({
+        frameworkId: fw.id,
+        clause: r.clause,
+        description: r.description,
+        evidenceType: r.evidenceType,
+        config: r.config ?? {},
+        sortOrder: j,
+      })),
+    );
+  }
 
   console.log("🎖  Creating certifications…");
   await db.insert(schema.certifications).values(
@@ -533,6 +561,9 @@ async function main() {
   console.log("🏅 Awarding certifications…");
   const awarded = await awardCertifications(db, org.id);
   console.log(`   Awarded ${awarded} certification(s).`);
+
+  console.log("📐 Generating compliance evidence…");
+  await evaluateOrgCompliance(db, org.id);
 
   console.log("✅ Seed complete");
   console.log(`   Org: ${org.name} (${org.slug})`);

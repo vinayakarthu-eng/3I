@@ -51,6 +51,85 @@ export type Difficulty = (typeof DIFFICULTIES)[number];
 export const CERT_STATUSES = ["active", "expired", "revoked"] as const;
 export type CertStatus = (typeof CERT_STATUSES)[number];
 
+export const COMPLIANCE_EVIDENCE_TYPES = [
+  "drill_completion",
+  "score_threshold",
+  "competency",
+  "certification",
+  "frequency",
+] as const;
+export type ComplianceEvidenceType = (typeof COMPLIANCE_EVIDENCE_TYPES)[number];
+
+export const COMPLIANCE_STATUSES = ["met", "partial", "not_met"] as const;
+export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number];
+
+export interface ComplianceReqConfig {
+  threshold?: number;
+  competency?: string;
+  minDrills?: number;
+}
+
+export interface ComplianceRequirementSeed {
+  clause: string;
+  description: string;
+  evidenceType: ComplianceEvidenceType;
+  config?: ComplianceReqConfig;
+}
+
+export interface ComplianceFrameworkSeed {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  requirements: ComplianceRequirementSeed[];
+}
+
+export const COMPLIANCE_FRAMEWORKS: ComplianceFrameworkSeed[] = [
+  {
+    id: "iso-27001",
+    name: "ISO 27001",
+    version: "2022",
+    description: "Information security management — incident management controls (Annex A.5).",
+    requirements: [
+      { clause: "A.5.24", description: "Information security incident management planning and preparation", evidenceType: "drill_completion" },
+      { clause: "A.5.25", description: "Assessment and decision on information security events", evidenceType: "competency", config: { competency: "Incident Scoping", threshold: 70 } },
+      { clause: "A.5.26", description: "Response to information security incidents", evidenceType: "competency", config: { competency: "Incident Mechanics", threshold: 70 } },
+      { clause: "A.5.27", description: "Learning from information security incidents", evidenceType: "drill_completion" },
+    ],
+  },
+  {
+    id: "dora",
+    name: "DORA",
+    version: "2022",
+    description: "Digital Operational Resilience Act — ICT incident response and testing.",
+    requirements: [
+      { clause: "Article 11", description: "ICT response and recovery", evidenceType: "score_threshold", config: { threshold: 70 } },
+      { clause: "Article 25", description: "Testing of ICT tools and systems", evidenceType: "frequency", config: { minDrills: 4 } },
+    ],
+  },
+  {
+    id: "soc-2",
+    name: "SOC 2",
+    version: "2017 TSC",
+    description: "Trust Services Criteria — incident response and recovery.",
+    requirements: [
+      { clause: "CC7.4", description: "The entity responds to identified security incidents", evidenceType: "competency", config: { competency: "Incident Command", threshold: 70 } },
+      { clause: "CC7.5", description: "The entity recovers from identified security incidents", evidenceType: "score_threshold", config: { threshold: 70 } },
+    ],
+  },
+  {
+    id: "nist-csf",
+    name: "NIST CSF",
+    version: "1.1",
+    description: "Cybersecurity Framework — Respond function.",
+    requirements: [
+      { clause: "RS.RP", description: "Response Planning", evidenceType: "drill_completion" },
+      { clause: "RS.CO", description: "Communications", evidenceType: "competency", config: { competency: "Internal Communication", threshold: 70 } },
+      { clause: "RS.AN", description: "Analysis", evidenceType: "competency", config: { competency: "Incident Scoping", threshold: 70 } },
+    ],
+  },
+];
+
 /** Requirements stored in certifications.requirements (jsonb). */
 export interface CertRequirements {
   minDrills?: number;

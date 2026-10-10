@@ -152,6 +152,21 @@ export async function listCompetencyAreas() {
   return db.select().from(competencyAreas).orderBy(asc(competencyAreas.sortOrder));
 }
 
+/** Org-wide average score per competency name (all scored drills). */
+export async function getOrgCompetencyAverages(orgId: string): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      name: competencyAreas.name,
+      score: sql<string>`round(avg(${drillScores.normalizedScore}), 1)`,
+    })
+    .from(drillScores)
+    .innerJoin(drills, eq(drills.id, drillScores.drillId))
+    .innerJoin(competencyAreas, eq(competencyAreas.id, drillScores.competencyAreaId))
+    .where(eq(drills.orgId, orgId))
+    .groupBy(competencyAreas.name);
+  return Object.fromEntries(rows.map((r) => [r.name, Number(r.score)]));
+}
+
 export interface CompetencyStat {
   id: string;
   name: string;
@@ -252,6 +267,20 @@ export async function listImprovementActions(orgId: string) {
 }
 
 export type ImprovementActionRow = Awaited<ReturnType<typeof listImprovementActions>>[number];
+
+/** Improvement actions for a single drill. */
+export async function listDrillActions(drillId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(drillId)) return [];
+  return db
+    .select({
+      action: improvementActions,
+      owner: { id: users.id, name: users.name },
+    })
+    .from(improvementActions)
+    .leftJoin(users, eq(users.id, improvementActions.ownerId))
+    .where(eq(improvementActions.drillId, drillId))
+    .orderBy(asc(improvementActions.severity));
+}
 
 /** Latest AAR per drill for the Reports page. */
 export async function listReports(orgId: string) {
