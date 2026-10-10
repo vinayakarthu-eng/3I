@@ -5,6 +5,7 @@ import { SkillBadge } from "@/components/readiness/skill-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { listUserCertifications } from "@/lib/certifications";
 import { getCurrentUser } from "@/lib/current-user";
 import { formatDate, formatScore, initials, scoreColor } from "@/lib/format";
@@ -56,6 +57,7 @@ export default async function UserReadinessPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
+      <Breadcrumbs items={[{ label: "Readiness", href: "/readiness" }, { label: user.name }]} />
       <Button asChild variant="ghost" size="sm" className="-ml-3 text-muted-foreground">
         <Link href="/readiness">
           <ArrowLeft className="h-4 w-4" />

@@ -1,4 +1,5 @@
 import { PrintButton } from "@/components/certifications/print-button";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,6 +76,13 @@ export default async function ReportPage({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: "Drills", href: "/drills" },
+          { label: drill.name, href: `/drills/${drill.id}` },
+          { label: "Report" },
+        ]}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Button asChild variant="ghost" size="sm" className="-ml-3 text-muted-foreground">
           <Link href={`/drills/${drill.id}`}>

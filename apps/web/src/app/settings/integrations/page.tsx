@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
 import { WebhooksManager } from "@/components/integrations/webhooks-manager";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,9 @@ export default async function IntegrationsPage() {
 
   return (
     <div className="space-y-8">
+      <Breadcrumbs
+        items={[{ label: "Settings", href: "/settings" }, { label: "Integrations" }]}
+      />
       <PageHeader
         title="Integrations"
         description="Connect DrillForce to your incident toolchain."

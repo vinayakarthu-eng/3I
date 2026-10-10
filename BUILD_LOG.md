@@ -181,3 +181,48 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
 - Decision: added a `webhook_deliveries` table (beyond the spec's single table) to back the
   delivery log.
 - `npm run build` passes; `/settings/integrations` returns 200.
+
+## Phase 10 — Navigation Polish + Settings + Final Verification ✅
+
+- **`/settings`**: real settings form — Organization (name/sector/logo placeholder), Scoring
+  (pass-threshold range slider, per-competency weights), Notifications (5 email toggles), Drill
+  defaults (default duration), and a link to Integrations. Persists to `organizations.config` via
+  `updateOrgSettings`.
+- **Navigation**: sidebar reordered to Dashboard · Drills · Scenarios · Readiness · Analytics ·
+  Actions · Compliance · Certifications · Reports · Settings.
+- **`/dashboard`**: re-exports the dashboard page so the alias returns **200** (CLAUDE.md
+  adjustment #1 — a redirect would 307 and fail the literal route check).
+- **404**: branded not-found page with DrillForce shield + CTAs.
+- **Breadcrumbs**: `Breadcrumbs` component added to nested pages (integrations, drill report,
+  readiness profile).
+- **Loading states**: `loading.tsx` skeletons for readiness, analytics, compliance, scenarios,
+  certifications, settings.
+- Empty states already present on list pages; mobile uses the existing responsive sidebar drawer
+  + horizontally-scrolling tables (`overflow-x-auto`) and stacking grids.
+
+## Final verification
+
+- `docker` Postgres/Redis healthy · `npm run db:migrate` + `npm run db:seed` clean.
+- `npm run build` passes · `npm run typecheck` passes (6/6 packages) · `npm test` 7/7 pass.
+- Route check (all **200**, /dashboard included): `/`, `/dashboard`, `/drills`, `/drills/new`,
+  `/scenarios`, `/readiness`, `/analytics`, `/actions`, `/compliance`, `/certifications`,
+  `/settings`, `/settings/integrations`, `/reports`.
+
+### Summary
+
+- **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),
+  `/analytics`, `/compliance`, `/certifications` (+`/[certId]/[userId]`), `/settings/integrations`,
+  `/dashboard`; new drill pages: `/simulate`, `/briefing`, `/live`, `/complete`, `/report`.
+- **New database tables (9):** drill_injects, competency_areas, drill_templates, certifications,
+  user_certifications, compliance_frameworks, compliance_requirements, drill_compliance_evidence,
+  webhooks (+ webhook_deliveries). Migrations `0003`–`0009`.
+- **UptimeLabs parity:** simulated monitoring war room, 6-area competency scoring, team readiness
+  heatmap, 21-scenario library + quick drills, 4 certifications, compliance evidence (ISO 27001 /
+  DORA / SOC 2 / NIST CSF), web-based real-time execution, benchmarking/analytics, integrations.
+- **DrillForce-only:** signal/inject engine, multi-sector scenarios (healthcare + public sector),
+  compliance mapping engine, webhook system with delivery log, structured multi-format reports,
+  improvement-action tracking with verification.
+- **Known gaps / next steps:** wizard objectives aren't auto-mapped to competency ids;
+  `action.created` webhook event isn't emitted (no web action-create path); email notifications are
+  preference-only. Recommended next: Clerk auth, Vercel deploy, a real Slack app connection, and an
+  `ANTHROPIC_API_KEY` for AI AAR/report generation.
