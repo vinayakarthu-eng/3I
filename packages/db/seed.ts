@@ -245,6 +245,35 @@ async function main() {
     { drillId: completedDrill.id, eventType: "system", actor: "system", channel, payload: { text: "Drill ended" }, occurredAt: at(75) },
   ]);
 
+  console.log("🕓 Recording status history…");
+  const statusChange = (
+    drillId: string,
+    from: string | null,
+    to: string,
+    occurredAt: Date,
+    actor: string,
+  ) => ({
+    drillId,
+    eventType: "system" as const,
+    actor,
+    payload: { kind: "status_change", from, to, text: from ? `Status changed from ${from} to ${to}` : `Drill created as ${to}` },
+    occurredAt,
+  });
+  await db.insert(schema.drillEvents).values([
+    statusChange(draftDrill.id, null, "draft", daysFromNow(-2), manager.id),
+    statusChange(scheduledDrill.id, null, "draft", daysFromNow(-6), admin.id),
+    statusChange(scheduledDrill.id, "draft", "scheduled", daysFromNow(-5), admin.id),
+    statusChange(completedDrill.id, null, "draft", daysFromNow(-30), admin.id),
+    statusChange(completedDrill.id, "draft", "scheduled", daysFromNow(-28), admin.id),
+    statusChange(completedDrill.id, "scheduled", "briefing", at(-15), manager.id),
+    statusChange(completedDrill.id, "briefing", "active", at(0), manager.id),
+    statusChange(completedDrill.id, "active", "scoring", at(75), manager.id),
+    statusChange(completedDrill.id, "scoring", "debriefing", at(120), manager.id),
+    statusChange(completedDrill.id, "debriefing", "completed", daysFromNow(-13), admin.id),
+    { drillId: completedDrill.id, eventType: "signal", actor: "system", channel, payload: { text: "Synthetic monitor: acme.com resolution failure rate 100%" }, occurredAt: at(1) },
+    { drillId: completedDrill.id, eventType: "score", actor: "auto", channel, payload: { text: "Auto-scoring completed: 2 objectives scored" }, occurredAt: at(80) },
+  ]);
+
   console.log("📊 Recording scores for completed drill…");
   const [ttaObj, completenessObj, qualityObj] = completedObjectives;
   await db.insert(schema.drillScores).values([

@@ -102,3 +102,35 @@ export const SECTOR_LABELS: Record<Sector, string> = {
   public_sector: "Public Sector",
 };
 export * from "./templates";
+
+/** Valid forward transitions; any non-terminal status may also be cancelled. */
+const FORWARD_TRANSITIONS: Record<DrillStatus, DrillStatus[]> = {
+  draft: ["scheduled"],
+  scheduled: ["briefing"],
+  briefing: ["active"],
+  active: ["scoring"],
+  scoring: ["debriefing"],
+  debriefing: ["completed"],
+  completed: [],
+  cancelled: [],
+};
+
+export function allowedTransitions(from: DrillStatus): DrillStatus[] {
+  if (from === "completed" || from === "cancelled") return [];
+  return [...FORWARD_TRANSITIONS[from], "cancelled"];
+}
+
+export function canTransition(from: DrillStatus, to: DrillStatus) {
+  return allowedTransitions(from).includes(to);
+}
+
+export const DEFAULT_PASS_THRESHOLD = 70;
+
+export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  message: "Message",
+  action: "Action",
+  inject: "Inject",
+  signal: "Signal",
+  score: "Score",
+  system: "System",
+};

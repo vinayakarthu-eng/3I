@@ -92,7 +92,9 @@ export async function getDrill(orgId: string, id: string) {
       creator: true,
       organization: true,
       objectives: { orderBy: (o, { asc }) => [asc(o.sortOrder)] },
-      participants: { with: { user: true } },
+      participants: { with: { user: true }, orderBy: (p, { asc }) => [asc(p.role)] },
+      events: { orderBy: (e, { asc }) => [asc(e.occurredAt)] },
+      scores: { orderBy: (s, { desc }) => [desc(s.scoredAt)] },
     },
   });
   if (!drill) return null;
@@ -102,8 +104,22 @@ export async function getDrill(orgId: string, id: string) {
     .from(compositeScores)
     .where(eq(compositeScores.drillId, id));
 
-  return { ...drill, score: composite?.score == null ? null : Number(composite.score) };
+  // Resolve event/score actors (user ids) to display names.
+  const orgUsers = await db.query.users.findMany({
+    where: (u, { eq }) => eq(u.orgId, orgId),
+    columns: { id: true, name: true },
+  });
+  const actorNames: Record<string, string> = { bot: "IC Bot", system: "System", auto: "Auto-scorer" };
+  for (const u of orgUsers) actorNames[u.id] = u.name;
+
+  return {
+    ...drill,
+    score: composite?.score == null ? null : Number(composite.score),
+    actorNames,
+  };
 }
+
+export type DrillDetail = NonNullable<Awaited<ReturnType<typeof getDrill>>>;
 
 export async function listOrgUsers(orgId: string) {
   return db.query.users.findMany({

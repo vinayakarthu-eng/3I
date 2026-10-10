@@ -44,6 +44,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Field } from "./field";
 import { TargetValueInput } from "./target-value-input";
 import { TemplateDialog } from "./template-dialog";
+import { WeightPicker } from "./weight-picker";
 
 const STEPS = [
   { title: "Basic information", description: "Name, type, and schedule" },
@@ -488,28 +489,6 @@ function ObjectivesStep({
         <Plus className="h-4 w-4" />
         Add Objective
       </Button>
-    </div>
-  );
-}
-
-function WeightPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="flex gap-1" role="radiogroup" aria-label="Weight">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          onClick={() => onChange(n)}
-          className={cn(
-            "h-9 w-9 rounded-md border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            n <= value ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
-          )}
-        >
-          {n}
-        </button>
-      ))}
     </div>
   );
 }
