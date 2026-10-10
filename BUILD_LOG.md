@@ -208,6 +208,31 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
   `/scenarios`, `/readiness`, `/analytics`, `/actions`, `/compliance`, `/certifications`,
   `/settings`, `/settings/integrations`, `/reports`.
 
+## Post-build — Realistic simulation engine ✅
+
+Reworked the war-room simulation (the UptimeLabs differentiator) from a single global
+intensity curve to a **per-service model**:
+
+- **Per-service telemetry** (`simulation-engine.ts`): each of the 6 services emits its own
+  rpm / error% / latency / CPU / queue-depth and health status; the 4 chart series are derived
+  from them (requests summed, error request-weighted, latency = worst path, CPU averaged).
+- **Dependency-aware cascading**: each scenario names which services it hits, how hard, and the
+  onset delay — so the root fails first and dependents degrade after it (e.g. DB Primary → down,
+  then Replica/Cache/API degrade, while MQ/CDN stay healthy).
+- **Scenario signatures**: DNS outage collapses requests to ~5% with ~85% errors across all
+  services; high-traffic drives ~8× rpm + a growing MQ queue (~46k) + CPU saturation; deployment
+  failure takes one service to 100% then cascades; credential leak keeps metrics near-normal with
+  the signal in the logs.
+- **Recovery phase**: an IC **Resolve** control sets a mitigation time; `overallPressure` then
+  decays and services heal back to baseline over ~4 min (verified: DB failover errors 21%→0.5%,
+  latency 4859ms→133ms).
+- **Richer logs** (`log-generator.ts`): templated lines with dynamic request ids, IPs, latencies,
+  status codes, SQL and cache keys; error/warn lines concentrate on whichever services are hot.
+- **War-room UI**: service grid shows live per-service metrics (`rpm · ms` healthy / `% err · ms`
+  impaired) with status-colored borders; recovery banner; IC Resolve button.
+- Verified via an engine harness (scenario-distinct output + recovery curve) and a deep-incident
+  war-room screenshot. Build/typecheck/tests all green.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

@@ -16,17 +16,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   SCENARIO_TYPE_LABELS,
+  aggregateMetrics,
   generateLogs,
-  generateMetrics,
-  generateServiceHealth,
-  incidentIntensity,
+  generateServiceMetrics,
   seedMetricWindow,
   type LogLine,
   type MetricSample,
   type ScenarioType,
-  type ServiceStatus,
+  type ServiceMetric,
+  type SimState,
 } from "@drillforce/shared";
-import { AlertTriangle, ClipboardCheck, Send, Siren, StopCircle, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, Send, ShieldCheck, Siren, StopCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -93,19 +93,22 @@ export function WarRoom({
     seedMetricWindow(scenarioType, WINDOW, STEP_SECONDS, 0),
   );
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [services, setServices] = useState<ServiceStatus[]>(() =>
-    generateServiceHealth(scenarioType, 0),
+  const [services, setServices] = useState<ServiceMetric[]>(() =>
+    generateServiceMetrics(scenarioType, 0, { firstInjectAtMin: null, firedCount: 0, mitigationStartMin: null }),
   );
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [firedIds, setFiredIds] = useState<Set<string>>(
     () => new Set(injects.filter((i) => i.fired).map((i) => i.id)),
   );
   const [latestAlert, setLatestAlert] = useState<string | null>(null);
+  const [mitigationStartMin, setMitigationStartMin] = useState<number | null>(null);
 
   const firedIdsRef = useRef(firedIds);
   firedIdsRef.current = firedIds;
+  const mitigationRef = useRef(mitigationStartMin);
+  mitigationRef.current = mitigationStartMin;
 
-  // First-inject time (minutes) across all injects, for intensity ramp.
+  // First-inject time (minutes) across all injects, for the incident ramp.
   const firstInjectAt =
     injects.length > 0 ? Math.min(...injects.map((i) => i.triggerAtMinutes)) : null;
 
@@ -143,14 +146,20 @@ export function WarRoom({
       }
 
       const firedCount = firedIdsRef.current.size + dueNow.length;
-      const intensity = incidentIntensity(minutes, firstInjectAt, firedCount);
+      const state: SimState = {
+        firstInjectAtMin: firstInjectAt,
+        firedCount,
+        mitigationStartMin: mitigationRef.current,
+      };
 
-      setSamples((s) => [...s.slice(-(WINDOW - 1)), generateMetrics(scenarioType, next, intensity)]);
+      const svcMetrics = generateServiceMetrics(scenarioType, next, state);
+      setSamples((s) => [...s.slice(-(WINDOW - 1)), aggregateMetrics(next, svcMetrics)]);
+      const hot = svcMetrics.some((sv) => sv.level > 0);
       setLogs((l) => {
-        const batch = generateLogs(scenarioType, next, intensity, intensity > 0 ? 4 : 2);
+        const batch = generateLogs(scenarioType, next, svcMetrics, hot ? 4 : 2);
         return [...l, ...batch].slice(-120);
       });
-      setServices(generateServiceHealth(scenarioType, intensity));
+      setServices(svcMetrics);
 
       return next;
     });
@@ -193,8 +202,26 @@ export function WarRoom({
     else setEnding(false);
   }
 
+  function resolveIncident() {
+    if (mitigationStartMin != null) return;
+    setMitigationStartMin(elapsed / 60);
+    setMessages((m) => [
+      ...m,
+      {
+        id: `mitigation-${elapsed}`,
+        actor: null,
+        actorName: "Scenario Control",
+        text: "Mitigation applied — services recovering toward baseline.",
+        kind: "inject",
+        occurredAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
   const current = samples[samples.length - 1];
-  const incidentActive = latestAlert !== null;
+  const recovering = mitigationStartMin != null;
+  const anyDegraded = services.some((s) => s.status !== "healthy");
+  const incidentActive = latestAlert !== null && !(recovering && !anyDegraded);
   const isObserver = live?.role === "observer" || live?.role === "evaluator";
 
   return (
@@ -228,6 +255,11 @@ export function WarRoom({
               onFire={fireManually}
             />
           )}
+          {live?.isIC && anyDegraded && !recovering && (
+            <Button variant="outline" size="sm" onClick={resolveIncident}>
+              <ShieldCheck className="h-4 w-4" /> Resolve
+            </Button>
+          )}
           {live?.isIC && (
             <Button variant="destructive" size="sm" onClick={handleEnd} disabled={ending}>
               <StopCircle className="h-4 w-4" /> End Drill
@@ -248,6 +280,14 @@ export function WarRoom({
           <span className="truncate font-medium">🚨 ALERT: {latestAlert}</span>
           <span className="ml-auto shrink-0 rounded bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
             {severity || "SEV-1"}
+          </span>
+        </div>
+      )}
+      {recovering && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-600 dark:text-emerald-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span className="truncate font-medium">
+            {anyDegraded ? "Mitigation in progress — services recovering…" : "Incident resolved — all services healthy."}
           </span>
         </div>
       )}
@@ -472,8 +512,8 @@ function ObserverSheet({
   );
 }
 
-function ServiceGrid({ services }: { services: ServiceStatus[] }) {
-  const color = (s: ServiceStatus["status"]) =>
+function ServiceGrid({ services }: { services: ServiceMetric[] }) {
+  const color = (s: ServiceMetric["status"]) =>
     s === "healthy"
       ? "bg-emerald-500"
       : s === "degraded"
@@ -484,13 +524,19 @@ function ServiceGrid({ services }: { services: ServiceStatus[] }) {
       {services.map((svc) => (
         <div
           key={svc.name}
-          className="flex items-center gap-2 rounded-md border bg-card px-3 py-2"
+          className={cn(
+            "flex items-center gap-2 rounded-md border bg-card px-3 py-2",
+            svc.status === "down" && "border-red-500/40",
+            svc.status === "degraded" && "border-amber-500/40",
+          )}
         >
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", color(svc.status))} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-medium">{svc.name}</div>
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              {svc.status}
+            <div className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {svc.status === "healthy"
+                ? `${svc.rpm.toLocaleString()} rpm · ${svc.latencyMs}ms`
+                : `${svc.errorRate}% err · ${svc.latencyMs}ms`}
             </div>
           </div>
         </div>
