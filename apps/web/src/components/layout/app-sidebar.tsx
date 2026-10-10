@@ -25,6 +25,7 @@ import {
   FileBarChart,
   LayoutDashboard,
   LayoutTemplate,
+  ListChecks,
   LogOut,
   Menu,
   Monitor,
@@ -43,6 +44,7 @@ import { useEffect, useState, type ReactNode } from "react";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/drills", label: "Drills", icon: ClipboardList },
+  { href: "/actions", label: "Actions", icon: ListChecks },
   { href: "/templates", label: "Templates", icon: LayoutTemplate },
   { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -65,7 +67,7 @@ export function AppShell({ user, org, orgs, children }: ShellProps) {
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r bg-muted/30 md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r bg-muted/30 md:flex print:!hidden">
         <SidebarContent user={user} org={org} orgs={orgs} />
       </aside>
 
@@ -89,7 +91,7 @@ export function AppShell({ user, org, orgs, children }: ShellProps) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:hidden print:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -100,7 +102,7 @@ export function AppShell({ user, org, orgs, children }: ShellProps) {
           </Button>
           <Logo />
         </header>
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8">
+        <main className="flex-1 px-4 py-6 md:px-8 md:py-8 print:p-0">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>

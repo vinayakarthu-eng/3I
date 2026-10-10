@@ -1,17 +1,20 @@
 import "server-only";
 import {
   and,
+  asc,
   count,
   db,
   desc,
   drillComposites,
   drillObjectives,
+  drillReports,
   drills,
   drillScores,
   eq,
   improvementActions,
   inArray,
   sql,
+  users,
 } from "@drillforce/db";
 
 /**
@@ -146,4 +149,45 @@ export async function getScoreTrend(orgId: string) {
     .where(eq(drills.orgId, orgId))
     .orderBy(sql`coalesce(${drills.endedAt}, ${drillComposites.computedAt})`);
   return rows.map((r) => ({ ...r, score: Number(r.score), at: new Date(r.at) }));
+}
+
+export async function listImprovementActions(orgId: string) {
+  return db
+    .select({
+      action: improvementActions,
+      drill: { id: drills.id, name: drills.name },
+      owner: { id: users.id, name: users.name },
+    })
+    .from(improvementActions)
+    .innerJoin(drills, eq(drills.id, improvementActions.drillId))
+    .leftJoin(users, eq(users.id, improvementActions.ownerId))
+    .where(eq(drills.orgId, orgId))
+    .orderBy(asc(improvementActions.dueDate), desc(improvementActions.createdAt));
+}
+
+export type ImprovementActionRow = Awaited<ReturnType<typeof listImprovementActions>>[number];
+
+/** Latest AAR per drill for the Reports page. */
+export async function listReports(orgId: string) {
+  const rows = await db
+    .select({
+      id: drillReports.id,
+      drillId: drills.id,
+      drillName: drills.name,
+      drillType: drills.type,
+      generatedBy: drillReports.generatedBy,
+      generatedAt: drillReports.generatedAt,
+      approvedAt: drillReports.approvedAt,
+      composite: drillComposites.compositeScore,
+      passed: drillComposites.passed,
+    })
+    .from(drillReports)
+    .innerJoin(drills, eq(drills.id, drillReports.drillId))
+    .leftJoin(drillComposites, eq(drillComposites.drillId, drills.id))
+    .where(and(eq(drills.orgId, orgId), eq(drillReports.reportType, "aar")))
+    .orderBy(desc(drillReports.generatedAt));
+  const seen = new Set<string>();
+  return rows
+    .filter((r) => (seen.has(r.drillId) ? false : (seen.add(r.drillId), true)))
+    .map((r) => ({ ...r, composite: r.composite == null ? null : Number(r.composite) }));
 }

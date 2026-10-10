@@ -8,9 +8,9 @@ config({ path: path.resolve(__dirname, "../../.env") });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@drillforce/db", "@drillforce/shared", "@drillforce/scoring-engine"],
+  transpilePackages: ["@drillforce/db", "@drillforce/shared", "@drillforce/scoring-engine", "@drillforce/report-generator"],
   experimental: {
-    serverComponentsExternalPackages: ["postgres"],
+    serverComponentsExternalPackages: ["postgres", "@anthropic-ai/sdk"],
   },
 };
 

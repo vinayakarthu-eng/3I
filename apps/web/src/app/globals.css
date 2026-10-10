@@ -67,3 +67,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print,
+  [data-radix-toast-viewport] {
+    display: none !important;
+  }
+}

@@ -217,6 +217,30 @@ export const drillComposites = pgTable(
   ],
 );
 
+// ─── drill_reports ──────────────────────────────────────────────────────────
+export const REPORT_TYPES = ["aar"] as const;
+
+export const drillReports = pgTable(
+  "drill_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => drills.id, { onDelete: "cascade" }),
+    reportType: text("report_type", { enum: REPORT_TYPES }).notNull().default("aar"),
+    content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+    /** Model id, or "template" when generated without Claude. */
+    generatedBy: text("generated_by"),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("drill_reports_drill_id_idx").on(t.drillId, t.generatedAt),
+    check("drill_reports_report_type_check", oneOf(t.reportType, REPORT_TYPES)),
+  ],
+);
+
 // ─── improvement_actions ────────────────────────────────────────────────────
 export const improvementActions = pgTable(
   "improvement_actions",
@@ -234,6 +258,9 @@ export const improvementActions = pgTable(
     status: text("status", { enum: ACTION_STATUSES }).notNull().default("open"),
     verificationMethod: text("verification_method"),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    deferralJustification: text("deferral_justification"),
+    /** The AAR this action came from, if any. */
+    reportId: uuid("report_id").references(() => drillReports.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -293,6 +320,13 @@ export const drillsRelations = relations(drills, ({ one, many }) => ({
   scores: many(drillScores),
   improvementActions: many(improvementActions),
   composite: one(drillComposites, { fields: [drills.id], references: [drillComposites.drillId] }),
+  reports: many(drillReports),
+}));
+
+export const drillReportsRelations = relations(drillReports, ({ one, many }) => ({
+  drill: one(drills, { fields: [drillReports.drillId], references: [drills.id] }),
+  approver: one(users, { fields: [drillReports.approvedBy], references: [users.id] }),
+  actions: many(improvementActions),
 }));
 
 export const drillCompositesRelations = relations(drillComposites, ({ one }) => ({
@@ -324,6 +358,7 @@ export const drillScoresRelations = relations(drillScores, ({ one }) => ({
 export const improvementActionsRelations = relations(improvementActions, ({ one }) => ({
   drill: one(drills, { fields: [improvementActions.drillId], references: [drills.id] }),
   owner: one(users, { fields: [improvementActions.ownerId], references: [users.id] }),
+  report: one(drillReports, { fields: [improvementActions.reportId], references: [drillReports.id] }),
 }));
 
 export const drillLifecycleTemplatesRelations = relations(drillLifecycleTemplates, ({ one }) => ({
@@ -343,5 +378,6 @@ export type DrillParticipant = typeof drillParticipants.$inferSelect;
 export type DrillEvent = typeof drillEvents.$inferSelect;
 export type DrillScore = typeof drillScores.$inferSelect;
 export type ImprovementAction = typeof improvementActions.$inferSelect;
+export type DrillReport = typeof drillReports.$inferSelect;
 export type DrillComposite = typeof drillComposites.$inferSelect;
 export type DrillLifecycleTemplate = typeof drillLifecycleTemplates.$inferSelect;

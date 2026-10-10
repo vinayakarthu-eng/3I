@@ -134,3 +134,38 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   score: "Score",
   system: "System",
 };
+
+export const ACTION_STATUS_LABELS: Record<ActionStatus, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  completed: "Completed",
+  verified: "Verified",
+  deferred: "Deferred",
+};
+
+export const ACTION_CATEGORY_LABELS: Record<ActionCategory, string> = {
+  process: "Process",
+  tooling: "Tooling",
+  knowledge: "Knowledge",
+  staffing: "Staffing",
+  design: "Design",
+};
+
+/** open → in_progress → completed → verified; anything unverified can be deferred (with justification). */
+const ACTION_TRANSITIONS: Record<ActionStatus, ActionStatus[]> = {
+  open: ["in_progress", "deferred"],
+  in_progress: ["open", "completed", "deferred"],
+  completed: ["in_progress", "verified", "deferred"],
+  verified: [],
+  deferred: ["open"],
+};
+
+export function allowedActionTransitions(from: ActionStatus): ActionStatus[] {
+  return ACTION_TRANSITIONS[from];
+}
+
+/** Overdue = past due and still being worked on. */
+export function isActionOverdue(a: { dueDate: string | null; status: ActionStatus }, today = new Date()) {
+  if (!a.dueDate || a.status === "completed" || a.status === "verified" || a.status === "deferred") return false;
+  return a.dueDate < today.toISOString().slice(0, 10);
+}
