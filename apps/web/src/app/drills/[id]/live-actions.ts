@@ -4,6 +4,7 @@ import type { ActionResult } from "@/app/drills/actions";
 import { evaluateCertifications } from "@/lib/certifications";
 import { evaluateCompliance } from "@/lib/compliance";
 import { getCurrentUser } from "@/lib/current-user";
+import { dispatchWebhookEvent } from "@/lib/webhooks";
 import { and, db, drillEvents, drills, eq } from "@drillforce/db";
 import { autoScoreDrill } from "@drillforce/scoring-engine";
 import { DRILL_STATUS_LABELS } from "@drillforce/shared";
@@ -64,6 +65,7 @@ export async function startDrill(drillId: string): Promise<ActionResult> {
       occurredAt: now,
     });
   });
+  await dispatchWebhookEvent(ctx.org.id, "drill.started", { drillId, name: drill.name });
   refresh(drillId);
   return { ok: true, data: null };
 }
@@ -91,11 +93,13 @@ export async function endDrill(drillId: string): Promise<ActionResult> {
     });
   });
 
+  await dispatchWebhookEvent(org.id, "drill.ended", { drillId, name: drill.name });
   try {
     const result = await autoScoreDrill(drillId);
     if (result.finalized) {
       await evaluateCertifications(org.id);
       await evaluateCompliance(org.id, drillId);
+      await dispatchWebhookEvent(org.id, "drill.scored", { drillId, name: drill.name });
     }
   } catch (err) {
     console.error("auto-scoring after endDrill failed", err);

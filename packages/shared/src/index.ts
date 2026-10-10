@@ -51,6 +51,23 @@ export type Difficulty = (typeof DIFFICULTIES)[number];
 export const CERT_STATUSES = ["active", "expired", "revoked"] as const;
 export type CertStatus = (typeof CERT_STATUSES)[number];
 
+export const WEBHOOK_EVENTS = [
+  "drill.started",
+  "drill.ended",
+  "drill.scored",
+  "inject.fired",
+  "action.created",
+] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEvent, string> = {
+  "drill.started": "Drill started",
+  "drill.ended": "Drill ended",
+  "drill.scored": "Drill scored",
+  "inject.fired": "Inject fired",
+  "action.created": "Action created",
+};
+
 export const COMPLIANCE_EVIDENCE_TYPES = [
   "drill_completion",
   "score_threshold",

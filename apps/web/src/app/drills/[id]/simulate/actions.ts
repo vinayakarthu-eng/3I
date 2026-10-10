@@ -2,6 +2,7 @@
 
 import type { ActionResult } from "@/app/drills/actions";
 import { getCurrentUser } from "@/lib/current-user";
+import { dispatchWebhookEvent } from "@/lib/webhooks";
 import { and, db, drillEvents, drillInjects, drills, eq } from "@drillforce/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -98,6 +99,11 @@ export async function fireInject(drillId: string, injectId: string): Promise<Act
     });
   });
 
+  await dispatchWebhookEvent(ctx.org.id, "inject.fired", {
+    drillId,
+    injectId,
+    description: inject.description,
+  });
   revalidatePath(`/drills/${drillId}/simulate`);
   revalidatePath(`/drills/${drillId}`);
   return { ok: true, data: null };

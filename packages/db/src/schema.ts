@@ -438,6 +438,40 @@ export const drillComplianceEvidence = pgTable(
   ],
 );
 
+// ─── webhooks ───────────────────────────────────────────────────────────────
+export const webhooks = pgTable(
+  "webhooks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    events: jsonb("events").$type<string[]>().notNull().default([]),
+    secret: text("secret"),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [index("webhooks_org_id_idx").on(t.orgId)],
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    webhookId: uuid("webhook_id")
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    success: boolean("success").notNull(),
+    statusCode: integer("status_code"),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("webhook_deliveries_webhook_id_idx").on(t.webhookId, t.createdAt)],
+);
+
 // ─── drill_lifecycle_templates ──────────────────────────────────────────────
 export interface LifecycleStage {
   id: string;
@@ -599,3 +633,6 @@ export type NewUserCertification = typeof userCertifications.$inferInsert;
 export type ComplianceFramework = typeof complianceFrameworks.$inferSelect;
 export type ComplianceRequirement = typeof complianceRequirements.$inferSelect;
 export type DrillComplianceEvidence = typeof drillComplianceEvidence.$inferSelect;
+export type Webhook = typeof webhooks.$inferSelect;
+export type NewWebhook = typeof webhooks.$inferInsert;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;

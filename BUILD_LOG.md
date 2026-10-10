@@ -164,3 +164,20 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
 - **Components**: `SimpleBar`/`SimpleLine` recharts wrappers + `DrillCompare` client selector.
   Reuses `CompetencyRadar`, `getReadinessMembers`, `getOrgCompetencyAverages`.
 - Added **Analytics** to the sidebar. `npm run build` passes; `/analytics` returns 200.
+
+## Phase 9 — Integrations + Webhooks ✅
+
+- **Schema** (migration `0009_unusual_ares`): `webhooks` (org, name, url, events jsonb, secret,
+  active) + `webhook_deliveries` (event, success, status_code, error) for the delivery log.
+- **`/settings/integrations`**: a 9-card integration grid — Slack is **functional** (status from
+  `SLACK_BOT_TOKEN`, links to the bot README); Teams is "Coming soon"; PagerDuty, Rootly, Datadog,
+  Grafana, Jira, Opsgenie, Statuspage are UI placeholders.
+- **Webhook system** (`lib/webhooks.ts`): `dispatchWebhookEvent(orgId, event, payload)` POSTs JSON
+  (with an optional HMAC-SHA256 `x-drillforce-signature`) to every active subscribed webhook and
+  records each attempt. Wired into `drill.started`, `drill.ended`, `drill.scored`, and
+  `inject.fired`. (`action.created` is selectable but not emitted — the web app has no action-create
+  path yet.)
+- **Webhook management UI**: add/edit/delete/pause, a Test button, and a delivery log table.
+- Decision: added a `webhook_deliveries` table (beyond the spec's single table) to back the
+  delivery log.
+- `npm run build` passes; `/settings/integrations` returns 200.
