@@ -62,6 +62,24 @@ Then in any public channel run `/drill database_failover 2` — the bot creates
 | `all clear` | IC marks it **resolved**; Scribe posts the after-action |
 | `sitrep` / `/sitrep` | IC posts a full situation report |
 
+## Alert-triggered incidents (channel + responders)
+
+Point a monitoring tool (Datadog, Grafana, PagerDuty, a cron check…) at the alert webhook.
+When it fires, the bot **creates the incident channel, pages the responders, and starts the
+response** — no slash command needed.
+
+```bash
+curl -X POST http://localhost:3000/api/alert \
+  -H 'content-type: application/json' \
+  -d '{"title":"Primary DB unreachable","service":"database-primary","severity":"SEV1","responders":["U0123ABC"]}'
+```
+
+- `service`/`title` pick the closest scenario (db → failover, auth/login → credential stuffing,
+  canary/deploy → canary leak).
+- `responders` (Slack user IDs) are invited and @-mentioned, along with everyone in `SLACK_ONCALL`.
+- In live Slack mode this creates a real `#inc-…` channel; in simulator mode it opens the incident
+  in the dashboard.
+
 ## Commands
 
 - `/drill [scenario] [speed]` — scenarios: `database_failover`, `credential_stuffing`,
