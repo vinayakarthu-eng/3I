@@ -72,6 +72,8 @@ async function main() {
         scenario: {
           summary:
             "A production API key for the payments service is found in a public GitHub repo by a security researcher.",
+          scenarioType: "credential_leak",
+          severity: "SEV-2",
           injects: [
             { at_minute: 0, description: "Security researcher emails security@ with a link to the leaked key." },
             { at_minute: 10, description: "Unusual API traffic detected from an unknown IP range." },
@@ -89,6 +91,8 @@ async function main() {
           "Simulate primary database failure and validate the failover runbook end-to-end.",
         scenario: {
           summary: "The primary Postgres cluster in us-east-1 becomes unresponsive during peak traffic.",
+          scenarioType: "database_failover",
+          severity: "SEV-1",
           injects: [
             { at_minute: 0, description: "PagerDuty alert: primary DB health checks failing." },
             { at_minute: 5, description: "Customer support reports checkout errors spiking." },
@@ -113,6 +117,8 @@ async function main() {
           "Full-scale exercise simulating loss of our primary DNS provider across all public domains.",
         scenario: {
           summary: "Our primary DNS provider suffers a global outage; all public hostnames stop resolving.",
+          scenarioType: "dns_outage",
+          severity: "SEV-1",
           injects: [
             { at_minute: 0, description: "Synthetic monitors report resolution failures for acme.com." },
             { at_minute: 8, description: "Social media reports that the site is down." },
@@ -218,6 +224,37 @@ async function main() {
     .returning();
 
   const completedObjectives = objectives.filter((o) => o.drillId === completedDrill.id);
+
+  console.log("⚡ Creating timed injects…");
+  const inject = (
+    drillId: string,
+    order: number,
+    triggerAtMinutes: number,
+    injectType: "metric_spike" | "log_flood" | "alert" | "comms",
+    description: string,
+  ) => ({ drillId, sortOrder: order, triggerAtMinutes, injectType, description });
+  await db.insert(schema.drillInjects).values([
+    // Credential leak (draft)
+    inject(draftDrill.id, 0, 0, "alert", "Security researcher emails security@ with a link to the leaked key."),
+    inject(draftDrill.id, 1, 4, "log_flood", "Unusual API traffic detected from an unknown IP range (203.0.113.0/24)."),
+    inject(draftDrill.id, 2, 8, "comms", "Legal asks whether customer data was accessed."),
+    inject(draftDrill.id, 3, 12, "alert", "Second key from the same repo confirmed active in production."),
+    inject(draftDrill.id, 4, 18, "comms", "PR drafts a holding statement and needs a go/no-go."),
+    // Database failover (scheduled)
+    inject(scheduledDrill.id, 0, 0, "alert", "Database primary reporting high replication lag."),
+    inject(scheduledDrill.id, 1, 3, "metric_spike", "Connection pool exhaustion — new connections timing out."),
+    inject(scheduledDrill.id, 2, 5, "metric_spike", "Application error rate exceeding 40%."),
+    inject(scheduledDrill.id, 3, 8, "comms", "Customer support: 200+ tickets in the last 5 minutes."),
+    inject(scheduledDrill.id, 4, 12, "comms", "CEO Slack message: board meeting in 1 hour, need a status update."),
+    inject(scheduledDrill.id, 5, 18, "log_flood", "Replica promotion stalling — quorum not reached."),
+    // DNS outage (completed)
+    inject(completedDrill.id, 0, 0, "alert", "Synthetic monitors report resolution failures for acme.com."),
+    inject(completedDrill.id, 1, 4, "metric_spike", "Request volume collapses to near zero across all regions."),
+    inject(completedDrill.id, 2, 8, "comms", "Social media reports that the site is down."),
+    inject(completedDrill.id, 3, 12, "log_flood", "All services logging name-resolution failures."),
+    inject(completedDrill.id, 4, 20, "comms", "Secondary DNS provider propagation is slower than expected."),
+    inject(completedDrill.id, 5, 30, "alert", "Status page SLA breach imminent — exec update requested."),
+  ]);
 
   console.log("🙋 Adding participants…");
   await db.insert(schema.drillParticipants).values([

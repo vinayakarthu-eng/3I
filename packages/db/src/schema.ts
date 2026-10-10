@@ -6,6 +6,7 @@ import {
   DRILL_STATUSES,
   DRILL_TYPES,
   EVENT_TYPES,
+  INJECT_TYPES,
   PARTICIPANT_ROLES,
   SECTORS,
   USER_ROLES,
@@ -158,6 +159,28 @@ export const drillEvents = pgTable(
   (t) => [
     index("drill_events_drill_id_occurred_at_idx").on(t.drillId, t.occurredAt),
     check("drill_events_event_type_check", oneOf(t.eventType, EVENT_TYPES)),
+  ],
+);
+
+// ─── drill_injects ──────────────────────────────────────────────────────────
+export const drillInjects = pgTable(
+  "drill_injects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => drills.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    triggerAtMinutes: integer("trigger_at_minutes").notNull().default(0),
+    injectType: text("inject_type", { enum: INJECT_TYPES }).notNull().default("alert"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    fired: boolean("fired").notNull().default(false),
+    firedAt: timestamp("fired_at", { withTimezone: true }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("drill_injects_drill_id_idx").on(t.drillId, t.triggerAtMinutes),
+    check("drill_injects_inject_type_check", oneOf(t.injectType, INJECT_TYPES)),
   ],
 );
 
@@ -318,9 +341,14 @@ export const drillsRelations = relations(drills, ({ one, many }) => ({
   participants: many(drillParticipants),
   events: many(drillEvents),
   scores: many(drillScores),
+  injects: many(drillInjects),
   improvementActions: many(improvementActions),
   composite: one(drillComposites, { fields: [drills.id], references: [drillComposites.drillId] }),
   reports: many(drillReports),
+}));
+
+export const drillInjectsRelations = relations(drillInjects, ({ one }) => ({
+  drill: one(drills, { fields: [drillInjects.drillId], references: [drills.id] }),
 }));
 
 export const drillReportsRelations = relations(drillReports, ({ one, many }) => ({
@@ -381,3 +409,5 @@ export type ImprovementAction = typeof improvementActions.$inferSelect;
 export type DrillReport = typeof drillReports.$inferSelect;
 export type DrillComposite = typeof drillComposites.$inferSelect;
 export type DrillLifecycleTemplate = typeof drillLifecycleTemplates.$inferSelect;
+export type DrillInject = typeof drillInjects.$inferSelect;
+export type NewDrillInject = typeof drillInjects.$inferInsert;

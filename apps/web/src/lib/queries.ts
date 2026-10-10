@@ -6,6 +6,7 @@ import {
   db,
   desc,
   drillComposites,
+  drillInjects,
   drillObjectives,
   drillReports,
   drills,
@@ -125,6 +126,16 @@ export async function getDrill(orgId: string, id: string) {
 }
 
 export type DrillDetail = NonNullable<Awaited<ReturnType<typeof getDrill>>>;
+
+/** Timed injects for a drill, ordered by trigger time. */
+export async function listDrillInjects(drillId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(drillId)) return [];
+  return db
+    .select()
+    .from(drillInjects)
+    .where(eq(drillInjects.drillId, drillId))
+    .orderBy(asc(drillInjects.triggerAtMinutes), asc(drillInjects.sortOrder));
+}
 
 export async function listOrgUsers(orgId: string) {
   return db.query.users.findMany({

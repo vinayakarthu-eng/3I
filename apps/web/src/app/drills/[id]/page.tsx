@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/current-user";
 import { getDrill, getScoreTrend, listOrgUsers } from "@/lib/queries";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MonitorPlay } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -36,12 +36,22 @@ export default async function DrillDetailPage({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <Button asChild variant="ghost" size="sm" className="-ml-3 text-muted-foreground">
-        <Link href="/drills">
-          <ArrowLeft className="h-4 w-4" />
-          All drills
-        </Link>
-      </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button asChild variant="ghost" size="sm" className="-ml-3 text-muted-foreground">
+          <Link href="/drills">
+            <ArrowLeft className="h-4 w-4" />
+            All drills
+          </Link>
+        </Button>
+        {(drill.status === "active" || drill.status === "briefing") && (
+          <Button asChild size="sm">
+            <Link href={`/drills/${drill.id}/simulate`}>
+              <MonitorPlay className="h-4 w-4" />
+              Enter Simulation
+            </Link>
+          </Button>
+        )}
+      </div>
 
       <DrillHeader
         drill={{ id: drill.id, name: drill.name, type: drill.type, status: drill.status, score: drill.score }}

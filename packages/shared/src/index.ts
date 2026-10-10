@@ -53,6 +53,10 @@ export interface DrillScenario {
   summary?: string;
   injects?: { at_minute: number; description: string }[];
   expected_actions?: string[];
+  /** Drives the simulation monitoring profile; see simulation-engine.ts. */
+  scenarioType?: ScenarioType;
+  /** SEV level surfaced in the alert banner, e.g. "SEV-1". */
+  severity?: string;
 }
 
 /** Target value shapes stored in drill_objectives.target_value */
@@ -102,6 +106,9 @@ export const SECTOR_LABELS: Record<Sector, string> = {
   public_sector: "Public Sector",
 };
 export * from "./templates";
+export * from "./simulation-engine";
+export * from "./log-generator";
+import type { ScenarioType } from "./simulation-engine";
 
 /** Valid forward transitions; any non-terminal status may also be cancelled. */
 const FORWARD_TRANSITIONS: Record<DrillStatus, DrillStatus[]> = {
