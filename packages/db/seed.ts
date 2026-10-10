@@ -1,3 +1,4 @@
+import { COMPETENCY_AREAS } from "@drillforce/shared";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -20,9 +21,21 @@ async function main() {
   await db.execute(sql`
     truncate table
       improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
-      drill_objectives, drills, drill_lifecycle_templates, users, organizations
+      drill_objectives, drill_injects, drills, drill_lifecycle_templates, competency_areas,
+      users, organizations
     restart identity cascade
   `);
+
+  console.log("🧠 Creating competency areas…");
+  const competencyAreas = await db
+    .insert(schema.competencyAreas)
+    .values(COMPETENCY_AREAS.map((c) => ({ ...c })))
+    .returning();
+  const c = (name: string) => {
+    const match = competencyAreas.find((a) => a.name === name);
+    if (!match) throw new Error(`Unknown competency area: ${name}`);
+    return match.id;
+  };
 
   console.log("🏢 Creating organization…");
   const [org] = await db
@@ -148,6 +161,7 @@ async function main() {
         drillId: draftDrill.id,
         description: "Revoke the leaked credential within 15 minutes of report",
         criteriaType: "time_to_action",
+        competencyAreaId: c("Incident Mechanics"),
         targetValue: { max_minutes: 15 },
         weight: 3,
         sortOrder: 0,
@@ -156,6 +170,7 @@ async function main() {
         drillId: draftDrill.id,
         description: "Complete the secret rotation checklist",
         criteriaType: "completeness",
+        competencyAreaId: c("Process Adherence"),
         targetValue: { checklist: ["Revoke key", "Issue new key", "Deploy new key", "Audit access logs"] },
         weight: 2,
         sortOrder: 1,
@@ -165,6 +180,7 @@ async function main() {
         drillId: scheduledDrill.id,
         description: "Detect database failure within 5 minutes",
         criteriaType: "time_to_action",
+        competencyAreaId: c("Incident Scoping"),
         targetValue: { max_minutes: 5 },
         weight: 3,
         sortOrder: 0,
@@ -173,6 +189,7 @@ async function main() {
         drillId: scheduledDrill.id,
         description: "Execute the failover runbook completely",
         criteriaType: "completeness",
+        competencyAreaId: c("Incident Mechanics"),
         targetValue: {
           checklist: ["Confirm primary down", "Promote replica", "Repoint app config", "Verify writes"],
         },
@@ -183,6 +200,7 @@ async function main() {
         drillId: scheduledDrill.id,
         description: "Communicate status to all stakeholders",
         criteriaType: "coordination",
+        competencyAreaId: c("Internal Communication"),
         targetValue: { stakeholders: ["Engineering Lead", "Support Lead", "VP Engineering"] },
         weight: 1,
         sortOrder: 2,
@@ -192,6 +210,7 @@ async function main() {
         drillId: completedDrill.id,
         description: "Declare an incident within 5 minutes of first alert",
         criteriaType: "time_to_action",
+        competencyAreaId: c("Incident Scoping"),
         targetValue: { max_minutes: 5 },
         weight: 3,
         sortOrder: 0,
@@ -200,6 +219,7 @@ async function main() {
         drillId: completedDrill.id,
         description: "Fail over to the secondary DNS provider",
         criteriaType: "completeness",
+        competencyAreaId: c("Incident Mechanics"),
         targetValue: {
           checklist: ["Lower TTLs", "Update NS records", "Verify propagation", "Monitor error rates"],
         },
@@ -210,6 +230,7 @@ async function main() {
         drillId: completedDrill.id,
         description: "Customer communication is clear and timely",
         criteriaType: "quality",
+        competencyAreaId: c("External Communication"),
         targetValue: {
           rubric: [
             { dimension: "Clarity", scale: 5 },
@@ -323,6 +344,7 @@ async function main() {
     {
       drillId: completedDrill.id,
       objectiveId: ttaObj.id,
+      competencyAreaId: ttaObj.competencyAreaId,
       criteriaType: "time_to_action",
       rawValue: "3",
       normalizedScore: "100",
@@ -338,6 +360,7 @@ async function main() {
     {
       drillId: completedDrill.id,
       objectiveId: completenessObj.id,
+      competencyAreaId: completenessObj.competencyAreaId,
       criteriaType: "completeness",
       rawValue: "3",
       normalizedScore: "75",
@@ -356,6 +379,7 @@ async function main() {
     {
       drillId: completedDrill.id,
       objectiveId: qualityObj.id,
+      competencyAreaId: qualityObj.competencyAreaId,
       criteriaType: "quality",
       rawValue: "3.3",
       normalizedScore: "66.7",
@@ -412,14 +436,15 @@ async function main() {
     const objs = await db
       .insert(schema.drillObjectives)
       .values([
-        { drillId: d.id, description: "Initial response within 10 minutes", criteriaType: "time_to_action", targetValue: { max_minutes: 10 }, weight: h.weights[0], sortOrder: 0 },
-        { drillId: d.id, description: "Leadership briefed accurately", criteriaType: "accuracy", targetValue: { expected_outcome: "Leadership receives an accurate impact summary within 30 minutes." }, weight: h.weights[1], sortOrder: 1 },
+        { drillId: d.id, description: "Initial response within 10 minutes", criteriaType: "time_to_action", competencyAreaId: c("Incident Scoping"), targetValue: { max_minutes: 10 }, weight: h.weights[0], sortOrder: 0 },
+        { drillId: d.id, description: "Leadership briefed accurately", criteriaType: "accuracy", competencyAreaId: c("Incident Command"), targetValue: { expected_outcome: "Leadership receives an accurate impact summary within 30 minutes." }, weight: h.weights[1], sortOrder: 1 },
       ])
       .returning();
     await db.insert(schema.drillScores).values(
       objs.map((o, i) => ({
         drillId: d.id,
         objectiveId: o.id,
+        competencyAreaId: o.competencyAreaId,
         criteriaType: o.criteriaType,
         normalizedScore: String(h.scores[i]),
         evidence: { note: "Imported from a previous exercise" },

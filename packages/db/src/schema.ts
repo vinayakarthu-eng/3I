@@ -2,6 +2,7 @@ import {
   ACTION_CATEGORIES,
   ACTION_SEVERITIES,
   ACTION_STATUSES,
+  COMPETENCY_CATEGORIES,
   CRITERIA_TYPES,
   DRILL_STATUSES,
   DRILL_TYPES,
@@ -70,6 +71,20 @@ export const users = pgTable(
   ],
 );
 
+// ─── competency_areas ─────────────────────────────────────────────────────────
+export const competencyAreas = pgTable(
+  "competency_areas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull().unique(),
+    description: text("description").notNull(),
+    category: text("category", { enum: COMPETENCY_CATEGORIES }).notNull().default("technical"),
+    weight: integer("weight").notNull().default(1),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [check("competency_areas_category_check", oneOf(t.category, COMPETENCY_CATEGORIES))],
+);
+
 // ─── drills ─────────────────────────────────────────────────────────────────
 export const drills = pgTable(
   "drills",
@@ -112,6 +127,9 @@ export const drillObjectives = pgTable(
       .references(() => drills.id, { onDelete: "cascade" }),
     description: text("description").notNull(),
     criteriaType: text("criteria_type", { enum: CRITERIA_TYPES }).notNull(),
+    competencyAreaId: uuid("competency_area_id").references(() => competencyAreas.id, {
+      onDelete: "set null",
+    }),
     targetValue: jsonb("target_value").$type<ObjectiveTarget>(),
     weight: integer("weight").notNull().default(1),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -194,6 +212,9 @@ export const drillScores = pgTable(
       .references(() => drills.id, { onDelete: "cascade" }),
     objectiveId: uuid("objective_id").references(() => drillObjectives.id, {
       onDelete: "cascade",
+    }),
+    competencyAreaId: uuid("competency_area_id").references(() => competencyAreas.id, {
+      onDelete: "set null",
     }),
     criteriaType: text("criteria_type", { enum: CRITERIA_TYPES }).notNull(),
     rawValue: numeric("raw_value"),
@@ -363,6 +384,15 @@ export const drillCompositesRelations = relations(drillComposites, ({ one }) => 
 
 export const drillObjectivesRelations = relations(drillObjectives, ({ one, many }) => ({
   drill: one(drills, { fields: [drillObjectives.drillId], references: [drills.id] }),
+  competencyArea: one(competencyAreas, {
+    fields: [drillObjectives.competencyAreaId],
+    references: [competencyAreas.id],
+  }),
+  scores: many(drillScores),
+}));
+
+export const competencyAreasRelations = relations(competencyAreas, ({ many }) => ({
+  objectives: many(drillObjectives),
   scores: many(drillScores),
 }));
 
@@ -411,3 +441,5 @@ export type DrillComposite = typeof drillComposites.$inferSelect;
 export type DrillLifecycleTemplate = typeof drillLifecycleTemplates.$inferSelect;
 export type DrillInject = typeof drillInjects.$inferSelect;
 export type NewDrillInject = typeof drillInjects.$inferInsert;
+export type CompetencyArea = typeof competencyAreas.$inferSelect;
+export type NewCompetencyArea = typeof competencyAreas.$inferInsert;

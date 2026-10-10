@@ -9,15 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAction } from "@/hooks/use-action";
 import { formatDate, formatScore, scoreColor } from "@/lib/format";
-import type { DrillDetail } from "@/lib/queries";
+import type { CompetencyStat, DrillDetail } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PASS_THRESHOLD, type CriteriaType } from "@drillforce/shared";
 import {
-  CRITERIA_TYPE_LABELS,
-  CRITERIA_TYPES,
-  DEFAULT_PASS_THRESHOLD,
-  type CriteriaType,
-} from "@drillforce/shared";
-import {
+  ArrowDownRight,
+  ArrowUpRight,
   BarChart3,
   Check,
   CheckCircle2,
@@ -25,6 +22,7 @@ import {
   ClipboardCheck,
   FileText,
   Loader2,
+  Minus,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -75,7 +73,15 @@ function latestScores(scores: Score[]) {
   return map;
 }
 
-export function ScoresTab({ drill, trend }: { drill: DrillDetail; trend: TrendPoint[] }) {
+export function ScoresTab({
+  drill,
+  trend,
+  competencyStats,
+}: {
+  drill: DrillDetail;
+  trend: TrendPoint[];
+  competencyStats: CompetencyStat[];
+}) {
   if (!SCORED_STATUSES.includes(drill.status)) {
     return (
       <div className="flex flex-col items-center rounded-lg border border-dashed px-6 py-16 text-center">
@@ -100,7 +106,13 @@ export function ScoresTab({ drill, trend }: { drill: DrillDetail; trend: TrendPo
         <EvaluatorForm drillId={drill.id} objectives={manualObjectives} latest={latest} />
       )}
       {latest.size > 0 ? (
-        <ScoreResults drill={drill} latest={latest} trend={trend} complete={allScored} />
+        <ScoreResults
+          drill={drill}
+          latest={latest}
+          trend={trend}
+          complete={allScored}
+          competencyStats={competencyStats}
+        />
       ) : (
         <div className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
           No scores yet.
@@ -350,11 +362,13 @@ function ScoreResults({
   latest,
   trend,
   complete,
+  competencyStats,
 }: {
   drill: DrillDetail;
   latest: Map<string, Score>;
   trend: TrendPoint[];
   complete: boolean;
+  competencyStats: CompetencyStat[];
 }) {
   const threshold = drill.composite?.passThreshold ?? Number(drill.config.passThreshold ?? DEFAULT_PASS_THRESHOLD);
   const composite = drill.composite ? Number(drill.composite.compositeScore) : drill.score;
@@ -362,17 +376,12 @@ function ScoreResults({
 
   const radarData = useMemo(
     () =>
-      CRITERIA_TYPES.map((c) => {
-        const vals = drill.objectives
-          .filter((o) => o.criteriaType === c && latest.has(o.id))
-          .map((o) => Number(latest.get(o.id)!.normalizedScore));
-        return {
-          criteria: CRITERIA_TYPE_LABELS[c],
-          score: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0,
-          hasData: vals.length > 0,
-        };
-      }),
-    [drill.objectives, latest],
+      competencyStats.map((c) => ({
+        criteria: c.name,
+        score: Math.round(c.score),
+        hasData: true,
+      })),
+    [competencyStats],
   );
 
   const trendData = trend.map((t) => ({ ...t, label: formatDate(t.at), isCurrent: t.drillId === drill.id }));
@@ -421,24 +430,57 @@ function ScoreResults({
 
         <Card className="lg:col-span-2">
           <CardHeader className="pb-0">
-            <CardTitle className="text-base">Score by criteria</CardTitle>
+            <CardTitle className="text-base">Score by competency</CardTitle>
+            <CardDescription>Objective scores grouped into the six competency areas.</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData} outerRadius="72%">
-                <PolarGrid stroke="hsl(var(--border))" />
-                <PolarAngleAxis dataKey="criteria" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(v: number, _n, item) => [item.payload.hasData ? v : "Not scored", "Score"]}
-                />
-                <Radar dataKey="score" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.3} />
-              </RadarChart>
-            </ResponsiveContainer>
+            {radarData.length >= 3 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData} outerRadius="72%">
+                  <PolarGrid stroke="hsl(var(--border))" />
+                  <PolarAngleAxis dataKey="criteria" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [v, "Score"]} />
+                  <Radar dataKey="score" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.3} />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                A radar needs at least three scored competencies.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {competencyStats.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Competency breakdown</CardTitle>
+            <CardDescription>
+              Average per competency, objectives assessed, and the trend versus your previous drill.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {competencyStats.map((c) => (
+              <div key={c.id} className="rounded-lg border p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.objectives} objective{c.objectives === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <span className={cn("text-2xl font-semibold tabular-nums", scoreColor(c.score))}>
+                    {formatScore(c.score)}
+                  </span>
+                </div>
+                <TrendArrow delta={c.delta} />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -528,6 +570,32 @@ function ScoreResults({
         </Card>
       )}
     </div>
+  );
+}
+
+function TrendArrow({ delta }: { delta: number | null }) {
+  if (delta == null) {
+    return <p className="mt-2 text-xs text-muted-foreground">No prior drill to compare.</p>;
+  }
+  if (Math.abs(delta) < 0.5) {
+    return (
+      <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+        <Minus className="h-3.5 w-3.5" /> Steady vs. last drill
+      </p>
+    );
+  }
+  const up = delta > 0;
+  return (
+    <p
+      className={cn(
+        "mt-2 flex items-center gap-1 text-xs font-medium",
+        up ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+      )}
+    >
+      {up ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+      {up ? "+" : ""}
+      {delta} vs. last drill
+    </p>
   );
 }
 

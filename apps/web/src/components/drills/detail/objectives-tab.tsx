@@ -60,16 +60,27 @@ import { GripVertical, Loader2, Pencil, Plus, Target, Trash2 } from "lucide-reac
 import { useEffect, useState } from "react";
 
 type Objective = DrillDetail["objectives"][number];
+interface CompetencyOption {
+  id: string;
+  name: string;
+}
 
 interface EditorState {
   id?: string;
   description: string;
   criteriaType: CriteriaType;
+  competencyAreaId: string | null;
   targetValue: Record<string, unknown>;
   weight: number;
 }
 
-export function ObjectivesTab({ drill }: { drill: DrillDetail }) {
+export function ObjectivesTab({
+  drill,
+  competencyAreas,
+}: {
+  drill: DrillDetail;
+  competencyAreas: CompetencyOption[];
+}) {
   const [items, setItems] = useState(drill.objectives);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [toDelete, setToDelete] = useState<Objective | null>(null);
@@ -116,6 +127,7 @@ export function ObjectivesTab({ drill }: { drill: DrillDetail }) {
             setEditor({
               description: "",
               criteriaType: "time_to_action",
+              competencyAreaId: null,
               targetValue: defaultTargetFor("time_to_action"),
               weight: 1,
             })
@@ -146,6 +158,7 @@ export function ObjectivesTab({ drill }: { drill: DrillDetail }) {
                       id: o.id,
                       description: o.description,
                       criteriaType: o.criteriaType,
+                      competencyAreaId: o.competencyAreaId ?? null,
                       targetValue: (o.targetValue as Record<string, unknown>) ?? defaultTargetFor(o.criteriaType),
                       weight: o.weight,
                     })
@@ -158,7 +171,14 @@ export function ObjectivesTab({ drill }: { drill: DrillDetail }) {
         </DndContext>
       )}
 
-      {editor && <ObjectiveDialog drillId={drill.id} initial={editor} onClose={() => setEditor(null)} />}
+      {editor && (
+        <ObjectiveDialog
+          drillId={drill.id}
+          initial={editor}
+          competencyAreas={competencyAreas}
+          onClose={() => setEditor(null)}
+        />
+      )}
 
       <AlertDialog open={!!toDelete} onOpenChange={(open) => !open && setToDelete(null)}>
         <AlertDialogContent>
@@ -223,6 +243,11 @@ function SortableObjective({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">#{index + 1}</span>
             <CriteriaBadge criteria={objective.criteriaType} />
+            {objective.competencyArea && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {objective.competencyArea.name}
+              </span>
+            )}
             <WeightDots weight={objective.weight} />
           </div>
           <p className="font-medium">{objective.description}</p>
@@ -279,13 +304,17 @@ function WeightDots({ weight }: { weight: number }) {
   );
 }
 
+const NONE_COMPETENCY = "__none__";
+
 function ObjectiveDialog({
   drillId,
   initial,
+  competencyAreas,
   onClose,
 }: {
   drillId: string;
   initial: EditorState;
+  competencyAreas: CompetencyOption[];
   onClose: () => void;
 }) {
   const [value, setValue] = useState(initial);
@@ -349,6 +378,26 @@ function ObjectiveDialog({
               <WeightPicker value={value.weight} onChange={(weight) => setValue({ ...value, weight })} />
             </Field>
           </div>
+          <Field label="Competency area">
+            <Select
+              value={value.competencyAreaId ?? NONE_COMPETENCY}
+              onValueChange={(v) =>
+                setValue({ ...value, competencyAreaId: v === NONE_COMPETENCY ? null : v })
+              }
+            >
+              <SelectTrigger aria-label="Competency area">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_COMPETENCY}>No competency</SelectItem>
+                {competencyAreas.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           <TargetValueInput
             id="objective-dialog"
             criteria={value.criteriaType}

@@ -122,6 +122,7 @@ export const objectiveSchema = z
     id: z.string().uuid().optional(),
     description: z.string().trim().min(1, "Description is required").max(1000),
     criteriaType: z.enum(CRITERIA_TYPES),
+    competencyAreaId: z.string().uuid().nullable().optional(),
     targetValue: z.record(z.unknown()),
     weight: z.coerce.number().int().min(1).max(5),
   })

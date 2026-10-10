@@ -42,6 +42,57 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export const ACTION_CATEGORIES = ["process", "tooling", "knowledge", "staffing", "design"] as const;
 export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 
+export const COMPETENCY_CATEGORIES = ["technical", "communication", "leadership", "process"] as const;
+export type CompetencyCategory = (typeof COMPETENCY_CATEGORIES)[number];
+
+export interface CompetencyAreaSeed {
+  name: string;
+  description: string;
+  category: CompetencyCategory;
+  sortOrder: number;
+}
+
+/** Canonical 6 competency areas; seeded into the competency_areas table. */
+export const COMPETENCY_AREAS: CompetencyAreaSeed[] = [
+  { name: "Incident Scoping", description: "Identify scope, severity, and blast radius quickly", category: "technical", sortOrder: 0 },
+  { name: "Incident Mechanics", description: "Technical diagnosis, mitigation steps, tool usage", category: "technical", sortOrder: 1 },
+  { name: "Internal Communication", description: "Status updates to team, escalation, handoffs", category: "communication", sortOrder: 2 },
+  { name: "External Communication", description: "Customer comms, stakeholder updates, status page management", category: "communication", sortOrder: 3 },
+  { name: "Incident Command", description: "Leadership, decision-making, delegation, prioritization", category: "leadership", sortOrder: 4 },
+  { name: "Process Adherence", description: "Following runbooks, documenting actions, post-incident procedures", category: "process", sortOrder: 5 },
+];
+
+export const COMPETENCY_CATEGORY_LABELS: Record<CompetencyCategory, string> = {
+  technical: "Technical",
+  communication: "Communication",
+  leadership: "Leadership",
+  process: "Process",
+};
+
+/** Skill level bands used by the readiness dashboard (Phase 3). */
+export const SKILL_LEVELS = [
+  { min: 90, max: 100, label: "Expert", badge: "gold" },
+  { min: 75, max: 89, label: "Advanced", badge: "purple" },
+  { min: 60, max: 74, label: "Practitioner", badge: "green" },
+  { min: 40, max: 59, label: "Beginner", badge: "blue" },
+  { min: 0, max: 39, label: "Novice", badge: "gray" },
+] as const;
+export type SkillLevel = (typeof SKILL_LEVELS)[number];
+
+export function skillLevel(score: number): SkillLevel {
+  return SKILL_LEVELS.find((l) => score >= l.min) ?? SKILL_LEVELS[SKILL_LEVELS.length - 1];
+}
+
+/** Heatmap cell color band for a 0–100 score. */
+export function scoreBand(score: number | null): "none" | "red" | "orange" | "yellow" | "green" | "emerald" {
+  if (score == null) return "none";
+  if (score < 50) return "red";
+  if (score < 70) return "orange";
+  if (score < 80) return "yellow";
+  if (score < 90) return "green";
+  return "emerald";
+}
+
 export const ACTION_SEVERITIES = ["P1", "P2", "P3", "P4"] as const;
 export type ActionSeverity = (typeof ACTION_SEVERITIES)[number];
 

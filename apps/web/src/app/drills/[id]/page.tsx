@@ -7,7 +7,13 @@ import { ScoresTab } from "@/components/drills/detail/scores-tab";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/current-user";
-import { getDrill, getScoreTrend, listOrgUsers } from "@/lib/queries";
+import {
+  getDrill,
+  getDrillCompetencyStats,
+  getScoreTrend,
+  listCompetencyAreas,
+  listOrgUsers,
+} from "@/lib/queries";
 import { ArrowLeft, MonitorPlay } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -25,10 +31,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function DrillDetailPage({ params, searchParams }: Props) {
   const { org } = await getCurrentUser();
-  const [drill, orgUsers, trend] = await Promise.all([
+  const [drill, orgUsers, trend, competencyStats, competencyAreas] = await Promise.all([
     getDrill(org.id, params.id),
     listOrgUsers(org.id),
     getScoreTrend(org.id),
+    getDrillCompetencyStats(org.id, params.id),
+    listCompetencyAreas(),
   ]);
   if (!drill) notFound();
 
@@ -72,7 +80,10 @@ export default async function DrillDetailPage({ params, searchParams }: Props) {
           <OverviewTab drill={drill} />
         </TabsContent>
         <TabsContent value="objectives">
-          <ObjectivesTab drill={drill} />
+          <ObjectivesTab
+            drill={drill}
+            competencyAreas={competencyAreas.map((a) => ({ id: a.id, name: a.name }))}
+          />
         </TabsContent>
         <TabsContent value="participants">
           <ParticipantsTab drill={drill} orgUsers={orgUsers} />
@@ -81,7 +92,7 @@ export default async function DrillDetailPage({ params, searchParams }: Props) {
           <EventsTab drill={drill} />
         </TabsContent>
         <TabsContent value="scores">
-          <ScoresTab drill={drill} trend={trend} />
+          <ScoresTab drill={drill} trend={trend} competencyStats={competencyStats} />
         </TabsContent>
       </Tabs>
     </div>

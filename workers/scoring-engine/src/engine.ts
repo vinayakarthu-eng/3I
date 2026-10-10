@@ -81,6 +81,7 @@ export async function autoScoreDrill(drillId: string) {
         scored.map(({ objective, result }) => ({
           drillId,
           objectiveId: objective.id,
+          competencyAreaId: objective.competencyAreaId,
           criteriaType: objective.criteriaType,
           rawValue: result.rawValue == null ? null : String(result.rawValue),
           normalizedScore: String(result.normalizedScore),
@@ -156,6 +157,7 @@ export async function recordManualScores(drillId: string, evaluatorId: string, i
         rows.map((r) => ({
           drillId,
           objectiveId: r.o.id,
+          competencyAreaId: r.o.competencyAreaId,
           criteriaType: r.o.criteriaType,
           rawValue: r.rawValue == null ? null : String(r.rawValue),
           normalizedScore: String(r.score),

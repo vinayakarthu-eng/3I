@@ -39,3 +39,20 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
 - Decision: full-screen as an overlay (`fixed inset-0 z-50`) rather than refactoring the
   root sidebar layout — lower risk, reused by Phase 7's `/live`.
 - `npm run build` passes.
+
+## Phase 2 — Competency Framework ✅
+
+- **Schema** (migration `0004_kind_sebastian_shaw`): `competency_areas` table
+  (name/description/category/weight/sort_order) + nullable `competency_area_id` FK on both
+  `drill_objectives` and `drill_scores` (`on delete set null`).
+- **Shared**: canonical `COMPETENCY_AREAS` (6), `COMPETENCY_CATEGORIES`, plus `SKILL_LEVELS` /
+  `skillLevel()` / `scoreBand()` helpers (used by Phase 3+).
+- **Seed**: inserts the 6 competency areas and maps every seed objective (and its scores) to a
+  competency. Used the 6 areas per CLAUDE.md adjustment #3.
+- **Scoring engine**: auto-score and manual-score inserts now copy `competencyAreaId` from the
+  objective so newly scored drills populate competencies.
+- **Scores tab**: radar is now **by competency** (not criteria), plus a competency breakdown
+  card (score, # objectives assessed, ↑/↓ trend vs. the org's previous drill via
+  `getDrillCompetencyStats`).
+- **Objectives tab**: competency selector in the add/edit dialog; competency shown on each card.
+- `npm run build` passes.

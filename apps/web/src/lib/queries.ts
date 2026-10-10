@@ -2,6 +2,7 @@ import "server-only";
 import {
   and,
   asc,
+  competencyAreas,
   count,
   db,
   desc,
@@ -96,7 +97,7 @@ export async function getDrill(orgId: string, id: string) {
     with: {
       creator: true,
       organization: true,
-      objectives: { orderBy: (o, { asc }) => [asc(o.sortOrder)] },
+      objectives: { with: { competencyArea: true }, orderBy: (o, { asc }) => [asc(o.sortOrder)] },
       participants: { with: { user: true }, orderBy: (p, { asc }) => [asc(p.role)] },
       events: { orderBy: (e, { asc }) => [asc(e.occurredAt)] },
       scores: { orderBy: (s, { desc }) => [desc(s.scoredAt)] },
@@ -135,6 +136,70 @@ export async function listDrillInjects(drillId: string) {
     .from(drillInjects)
     .where(eq(drillInjects.drillId, drillId))
     .orderBy(asc(drillInjects.triggerAtMinutes), asc(drillInjects.sortOrder));
+}
+
+export async function listCompetencyAreas() {
+  return db.select().from(competencyAreas).orderBy(asc(competencyAreas.sortOrder));
+}
+
+export interface CompetencyStat {
+  id: string;
+  name: string;
+  category: string;
+  score: number;
+  objectives: number;
+  /** current − previous drill's score for the same competency; null when no prior data. */
+  delta: number | null;
+}
+
+/** Per-competency average scores for a drill, with a delta vs. the org's previous scored drill. */
+export async function getDrillCompetencyStats(orgId: string, drillId: string): Promise<CompetencyStat[]> {
+  if (!/^[0-9a-f-]{36}$/i.test(drillId)) return [];
+
+  // Ordered timeline of this org's scored drills, oldest first.
+  const timeline = await db
+    .select({ drillId: drillComposites.drillId })
+    .from(drillComposites)
+    .innerJoin(drills, eq(drills.id, drillComposites.drillId))
+    .where(eq(drills.orgId, orgId))
+    .orderBy(asc(sql`coalesce(${drills.endedAt}, ${drillComposites.computedAt})`));
+  const idx = timeline.findIndex((t) => t.drillId === drillId);
+  const prevDrillId = idx > 0 ? timeline[idx - 1].drillId : null;
+
+  const perCompetency = async (id: string) =>
+    db
+      .select({
+        competencyId: competencyAreas.id,
+        name: competencyAreas.name,
+        category: competencyAreas.category,
+        sortOrder: competencyAreas.sortOrder,
+        score: sql<string>`round(avg(${drillScores.normalizedScore}), 1)`,
+        objectives: count(drillScores.id),
+      })
+      .from(drillScores)
+      .innerJoin(competencyAreas, eq(competencyAreas.id, drillScores.competencyAreaId))
+      .where(eq(drillScores.drillId, id))
+      .groupBy(competencyAreas.id, competencyAreas.name, competencyAreas.category, competencyAreas.sortOrder)
+      .orderBy(asc(competencyAreas.sortOrder));
+
+  const [current, previous] = await Promise.all([
+    perCompetency(drillId),
+    prevDrillId ? perCompetency(prevDrillId) : Promise.resolve([]),
+  ]);
+  const prevMap = new Map(previous.map((p) => [p.competencyId, Number(p.score)]));
+
+  return current.map((row) => {
+    const score = Number(row.score);
+    const prev = prevMap.get(row.competencyId);
+    return {
+      id: row.competencyId,
+      name: row.name,
+      category: row.category,
+      score,
+      objectives: Number(row.objectives),
+      delta: prev == null ? null : Math.round((score - prev) * 10) / 10,
+    };
+  });
 }
 
 export async function listOrgUsers(orgId: string) {
