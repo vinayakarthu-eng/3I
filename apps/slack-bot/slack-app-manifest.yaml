@@ -1,0 +1,41 @@
+# Paste this into https://api.slack.com/apps → Create New App → From an app manifest.
+display_information:
+  name: DrillForce
+  description: Incident drill orchestration with a Claude-powered Incident Commander
+  background_color: "#18181b"
+features:
+  bot_user:
+    display_name: DrillForce IC
+    always_online: true
+  slash_commands:
+    - command: /drillforce
+      description: Start, inject into, check, or end a drill
+      usage_hint: "start <drill-id> | status | inject <description> | end"
+      should_escape: false
+      # Only used if you switch off socket mode (production):
+      url: https://YOUR-HOST/slack/events
+oauth_config:
+  scopes:
+    bot:
+      - commands
+      - chat:write
+      - channels:manage
+      - channels:read
+      - channels:history
+      - channels:join
+      - reactions:read
+      - users:read
+      - users:read.email
+settings:
+  event_subscriptions:
+    # Only used if you switch off socket mode (production):
+    request_url: https://YOUR-HOST/slack/events
+    bot_events:
+      - message.channels
+      - reaction_added
+      - member_joined_channel
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
