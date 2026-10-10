@@ -101,3 +101,4 @@ export const SECTOR_LABELS: Record<Sector, string> = {
   healthcare: "Healthcare",
   public_sector: "Public Sector",
 };
+export * from "./templates";

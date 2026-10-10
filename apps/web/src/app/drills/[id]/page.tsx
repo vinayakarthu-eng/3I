@@ -22,7 +22,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { formatDate, formatDateTime, formatScore, initials, scoreColor } from "@/lib/format";
 import { getDrill } from "@/lib/queries";
 import { cn } from "@/lib/utils";
-import { SECTOR_LABELS } from "@drillforce/shared";
+import { SECTOR_LABELS, type Sector } from "@drillforce/shared";
 import { ArrowLeft, BarChart3, Radio } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -104,7 +104,7 @@ export default async function DrillDetailPage({ params }: Props) {
                   <InfoRow label="Scheduled">{formatDateTime(drill.scheduledAt)}</InfoRow>
                   {drill.startedAt && <InfoRow label="Started">{formatDateTime(drill.startedAt)}</InfoRow>}
                   {drill.endedAt && <InfoRow label="Ended">{formatDateTime(drill.endedAt)}</InfoRow>}
-                  <InfoRow label="Sector">{SECTOR_LABELS[drill.organization.sector]}</InfoRow>
+                  <InfoRow label="Sector">{SECTOR_LABELS[(drill.config.sector as Sector | undefined) ?? drill.organization.sector]}</InfoRow>
                   <InfoRow label="Created by">{drill.creator?.name ?? "—"}</InfoRow>
                   <InfoRow label="Created">{formatDate(drill.createdAt)}</InfoRow>
                 </dl>

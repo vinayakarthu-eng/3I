@@ -104,3 +104,11 @@ export async function getDrill(orgId: string, id: string) {
 
   return { ...drill, score: composite?.score == null ? null : Number(composite.score) };
 }
+
+export async function listOrgUsers(orgId: string) {
+  return db.query.users.findMany({
+    where: (u, { eq }) => eq(u.orgId, orgId),
+    orderBy: (u, { asc }) => [asc(u.name)],
+    columns: { id: true, name: true, email: true, role: true },
+  });
+}
