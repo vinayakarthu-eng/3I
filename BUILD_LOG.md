@@ -151,3 +151,16 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
   "View Full Report" CTA. End Drill routes here; `/live` and `/briefing` redirect by status.
 - Drill detail routes to Briefing/Live/Simulation based on status.
 - `npm run build` passes; briefing/live/simulate/complete all return 200.
+
+## Phase 8 — Benchmarking + Analytics ✅
+
+- **Queries** (`src/lib/analytics.ts`): `getDrillAnalytics` (per scored drill: composite,
+  time-to-resolution, time-to-first-response from first message/action event, event count,
+  competency scores) and `getMostImproved` (biggest composite gain across a user's recent drills).
+- **`/analytics`**: MTTR trend (line), drill frequency per month (bar), score distribution
+  histogram, org competency radar, Top Performers / Most Improved / Risk Areas (<60 highlighted
+  red) cards, TTR-by-scenario-type bar, average TTR / TTFR stat cards, this-quarter-vs-last
+  internal benchmark with trend arrow, and an interactive 2–3 drill comparison table.
+- **Components**: `SimpleBar`/`SimpleLine` recharts wrappers + `DrillCompare` client selector.
+  Reuses `CompetencyRadar`, `getReadinessMembers`, `getOrgCompetencyAverages`.
+- Added **Analytics** to the sidebar. `npm run build` passes; `/analytics` returns 200.
