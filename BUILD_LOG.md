@@ -264,10 +264,23 @@ client. Rollout is additive — the API grows alongside the working UI, which mi
   wrapper authenticates and maps results/errors to a `{ data } | { error }` envelope.
 - Verified with curl: 401 without/with a bad key; authed reads return org-scoped JSON.
   `typecheck` 7/7, `build` compiles all routes.
-- **Next:** write endpoints (create drill, change status, submit scores, fire inject) in core +
-  POST routes; API-key management UI in Settings; a typed `packages/sdk`; migrate the web app and
-  Slack bot to consume the API; OpenAPI spec. Standalone `apps/api` is a lift-and-shift later since
-  the handlers are thin.
+### Headless — writes + key management (done)
+
+- **Core writes** (`drill-writes.ts`): `createDrill` (from a template or name+type+objectives, with
+  participant find-or-create), `changeDrillStatus` (validated transitions; entering `scoring`
+  auto-scores + re-evaluates certs/compliance), `fireInject`, `submitScores` (wraps the scoring
+  engine + evals). All zod-validated, org-scoped, returning typed `ApiError`s.
+- **POST routes**: `POST /api/v1/drills`, `/drills/:id/status`, `/drills/:id/scores`,
+  `/drills/:id/injects/:injectId/fire`.
+- **Key management** (`api-keys.ts` + Settings UI): `listApiKeys` / `createApiKey` (raw shown once) /
+  `revokeApiKey`; a Settings card to create (reveal-once dialog + copy), list (prefix / created /
+  last-used), and revoke keys.
+- Verified by driving a whole drill over curl: create-from-template → draft→scheduled→briefing→active
+  → fire inject, plus a rejected `active→completed` (400). Settings key card renders. `typecheck`
+  7/7, `build` compiles all 9 `/api/v1` routes.
+- **Still ahead:** a typed `packages/sdk`; migrate the web app + Slack bot to consume the API;
+  OpenAPI spec; webhook dispatch from core (API-path writes don't emit webhooks yet); optional
+  standalone `apps/api`.
 
 ### Summary
 
