@@ -1,0 +1,2 @@
+ALTER TABLE "drill_events" DROP CONSTRAINT "drill_events_event_type_check";--> statement-breakpoint
+ALTER TABLE "drill_events" ADD CONSTRAINT "drill_events_event_type_check" CHECK ("drill_events"."event_type" in ('message', 'action', 'inject', 'signal', 'score', 'system', 'observation'));

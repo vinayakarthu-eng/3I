@@ -1,8 +1,18 @@
 "use client";
 
+import { endDrill, recordObservation } from "@/app/drills/[id]/live-actions";
 import { fireInject, postChatMessage, type ChatMessage } from "@/app/drills/[id]/simulate/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   SCENARIO_TYPE_LABELS,
@@ -16,8 +26,9 @@ import {
   type ScenarioType,
   type ServiceStatus,
 } from "@drillforce/shared";
-import { AlertTriangle, Send, X } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Send, Siren, StopCircle, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Area,
@@ -42,6 +53,12 @@ export interface InjectItem {
   fired: boolean;
 }
 
+export interface LiveConfig {
+  isIC: boolean;
+  role: string;
+  objectives: { id: string; description: string }[];
+}
+
 interface WarRoomProps {
   drillId: string;
   scenarioType: ScenarioType;
@@ -50,6 +67,8 @@ interface WarRoomProps {
   injects: InjectItem[];
   initialMessages: ChatMessage[];
   currentUser: { id: string; name: string };
+  /** When present, enables real-time execution controls (End Drill, inject panel, observer scoring). */
+  live?: LiveConfig;
 }
 
 function mmss(totalSeconds: number) {
@@ -66,7 +85,9 @@ export function WarRoom({
   injects,
   initialMessages,
   currentUser,
+  live,
 }: WarRoomProps) {
+  const router = useRouter();
   const [elapsed, setElapsed] = useState(0); // seconds of drill time
   const [samples, setSamples] = useState<MetricSample[]>(() =>
     seedMetricWindow(scenarioType, WINDOW, STEP_SECONDS, 0),
@@ -140,8 +161,41 @@ export function WarRoom({
     return () => clearInterval(id);
   }, [tick]);
 
+  const [ending, setEnding] = useState(false);
+
+  function applyInjectLocally(inj: InjectItem) {
+    if (firedIdsRef.current.has(inj.id)) return;
+    setFiredIds((p) => new Set(p).add(inj.id));
+    setLatestAlert(inj.description);
+    setMessages((m) => [
+      ...m,
+      {
+        id: `inject-${inj.id}`,
+        actor: null,
+        actorName: "Scenario Control",
+        text: inj.description,
+        kind: "inject",
+        occurredAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  async function fireManually(inj: InjectItem) {
+    applyInjectLocally(inj);
+    await fireInject(drillId, inj.id);
+  }
+
+  async function handleEnd() {
+    if (ending) return;
+    setEnding(true);
+    const res = await endDrill(drillId);
+    if (res.ok) router.push(`/drills/${drillId}/complete`);
+    else setEnding(false);
+  }
+
   const current = samples[samples.length - 1];
   const incidentActive = latestAlert !== null;
+  const isObserver = live?.role === "observer" || live?.role === "evaluator";
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -164,6 +218,21 @@ export function WarRoom({
               incidentActive ? "animate-pulse bg-red-500" : "bg-emerald-500",
             )}
           />
+          {live && isObserver && (
+            <ObserverSheet drillId={drillId} objectives={live.objectives} />
+          )}
+          {live?.isIC && (
+            <InjectControlSheet
+              injects={injects}
+              firedIds={firedIds}
+              onFire={fireManually}
+            />
+          )}
+          {live?.isIC && (
+            <Button variant="destructive" size="sm" onClick={handleEnd} disabled={ending}>
+              <StopCircle className="h-4 w-4" /> End Drill
+            </Button>
+          )}
           <Button asChild variant="ghost" size="sm">
             <Link href={`/drills/${drillId}`}>
               <X className="h-4 w-4" /> Exit
@@ -235,7 +304,171 @@ export function WarRoom({
           />
         </div>
       </div>
+
+      {/* Bottom inject ticker (live mode) */}
+      {live && (
+        <div className="flex shrink-0 items-center gap-2 overflow-hidden border-t bg-muted/50 px-4 py-1.5 text-xs">
+          <span className="shrink-0 font-semibold uppercase tracking-wide text-muted-foreground">
+            Latest inject
+          </span>
+          <span className="truncate">
+            {latestAlert ?? "Awaiting first inject…"}
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function InjectControlSheet({
+  injects,
+  firedIds,
+  onFire,
+}: {
+  injects: InjectItem[];
+  firedIds: Set<string>;
+  onFire: (inj: InjectItem) => void;
+}) {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Siren className="h-4 w-4" /> Injects
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Inject control</SheetTitle>
+          <SheetDescription>
+            Injects fire automatically on their scheduled time. Fire one early as the IC.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 space-y-2">
+          {injects.length === 0 && (
+            <p className="text-sm text-muted-foreground">No injects configured for this drill.</p>
+          )}
+          {injects.map((inj) => {
+            const fired = firedIds.has(inj.id);
+            return (
+              <div key={inj.id} className="flex items-start gap-3 rounded-md border p-3">
+                <span className="mt-0.5 shrink-0 font-mono text-xs text-muted-foreground">
+                  T+{inj.triggerAtMinutes}m
+                </span>
+                <span className="min-w-0 flex-1 text-sm">{inj.description}</span>
+                <Button
+                  size="sm"
+                  variant={fired ? "ghost" : "outline"}
+                  disabled={fired}
+                  onClick={() => onFire(inj)}
+                >
+                  {fired ? "Fired" : "Fire"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+const QUICK_TAGS = ["Good catch", "Missed step", "Late response", "Strong communication"];
+
+function ObserverSheet({
+  drillId,
+  objectives,
+}: {
+  drillId: string;
+  objectives: { id: string; description: string }[];
+}) {
+  const [note, setNote] = useState("");
+  const [objectiveId, setObjectiveId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
+
+  async function submit(text: string, tag?: string) {
+    if (!text.trim() || saving) return;
+    setSaving(true);
+    const res = await recordObservation(drillId, {
+      text,
+      tag,
+      objectiveId: objectiveId || undefined,
+    });
+    if (res.ok) {
+      setLog((l) => [`${tag ? `[${tag}] ` : ""}${text}`, ...l]);
+      setNote("");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm">
+          <ClipboardCheck className="h-4 w-4" /> Observe
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Observer scoring</SheetTitle>
+          <SheetDescription>
+            Log timestamped observations. They feed the After-Action Report.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {QUICK_TAGS.map((t) => (
+              <Button
+                key={t}
+                size="sm"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => submit(note.trim() || t, t)}
+              >
+                {t}
+              </Button>
+            ))}
+          </div>
+
+          {objectives.length > 0 && (
+            <select
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={objectiveId}
+              onChange={(e) => setObjectiveId(e.target.value)}
+            >
+              <option value="">No specific objective</option>
+              {objectives.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.description}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <Textarea
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="What did you observe? e.g. 'IC delegated comms at T+4m'"
+          />
+          <Button className="w-full" disabled={saving || !note.trim()} onClick={() => submit(note)}>
+            Record observation
+          </Button>
+
+          {log.length > 0 && (
+            <div className="space-y-1 border-t pt-3">
+              <p className="text-xs font-medium text-muted-foreground">This session</p>
+              {log.map((l, i) => (
+                <p key={i} className="text-sm">
+                  • {l}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

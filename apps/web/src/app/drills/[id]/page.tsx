@@ -51,13 +51,29 @@ export default async function DrillDetailPage({ params, searchParams }: Props) {
             All drills
           </Link>
         </Button>
-        {(drill.status === "active" || drill.status === "briefing") && (
+        {drill.status === "briefing" && (
           <Button asChild size="sm">
-            <Link href={`/drills/${drill.id}/simulate`}>
+            <Link href={`/drills/${drill.id}/briefing`}>
               <MonitorPlay className="h-4 w-4" />
-              Enter Simulation
+              Open Briefing
             </Link>
           </Button>
+        )}
+        {drill.status === "active" && (
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/drills/${drill.id}/simulate`}>
+                <MonitorPlay className="h-4 w-4" />
+                Simulation
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/drills/${drill.id}/live`}>
+                <MonitorPlay className="h-4 w-4" />
+                Enter Live Drill
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
 

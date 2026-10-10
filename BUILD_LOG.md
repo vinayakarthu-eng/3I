@@ -133,3 +133,21 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
   (status / last evidence / evidence count), print/export. Sidebar shows **Compliance**.
 - Scores tab links to the Full Report.
 - `npm run build` passes; `/compliance` and all report tabs return 200.
+
+## Phase 7 — Real-Time Drill Execution ✅
+
+- **Schema**: added `observation` to `EVENT_TYPES` (migration `0008_clumsy_colleen_wing`,
+  CLAUDE.md adjustment #5); updated the events-tab icon map.
+- **`/drills/[id]/briefing`**: scenario, objectives, rules of engagement, roster with per-member
+  readiness, "I'm Ready" toggle (stored in `config.ready`), and an IC "Start Drill" button that
+  unlocks once all are ready → moves the drill to `active` and opens `/live`.
+- **`/drills/[id]/live`**: reuses the Phase 1 WarRoom with a `live` config — IC gets an **End
+  Drill** button and an **Injects** control sheet (fire injects early); observers/evaluators get
+  an **Observe** sheet (quick-tag buttons + free-text notes + objective selector → `observation`
+  events); a bottom inject ticker. Injects still auto-fire on schedule.
+- **Server actions** (`live-actions.ts`): `toggleReady`, `startDrill`, `endDrill` (→ scoring +
+  auto-score + cert/compliance eval), `recordObservation`.
+- **`/drills/[id]/complete`**: elapsed time, event count, composite, initial auto-scores, and a
+  "View Full Report" CTA. End Drill routes here; `/live` and `/briefing` redirect by status.
+- Drill detail routes to Briefing/Live/Simulation based on status.
+- `npm run build` passes; briefing/live/simulate/complete all return 200.

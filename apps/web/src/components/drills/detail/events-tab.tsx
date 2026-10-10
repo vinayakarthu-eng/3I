@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   BarChart3,
   Cog,
+  Eye,
   MessageSquare,
   Radio,
   Zap,
@@ -24,6 +25,7 @@ const EVENT_STYLE: Record<EventType, { icon: LucideIcon; className: string }> = 
   signal: { icon: Radio, className: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
   score: { icon: BarChart3, className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300" },
   system: { icon: Cog, className: "bg-muted text-muted-foreground" },
+  observation: { icon: Eye, className: "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300" },
 };
 
 function describe(payload: Record<string, unknown>) {

@@ -36,7 +36,7 @@ export const PARTICIPANT_ROLES = [
 ] as const;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 
-export const EVENT_TYPES = ["message", "action", "inject", "signal", "score", "system"] as const;
+export const EVENT_TYPES = ["message", "action", "inject", "signal", "score", "system", "observation"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
 export const ACTION_CATEGORIES = ["process", "tooling", "knowledge", "staffing", "design"] as const;
@@ -385,6 +385,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   signal: "Signal",
   score: "Score",
   system: "System",
+  observation: "Observation",
 };
 
 export const ACTION_STATUS_LABELS: Record<ActionStatus, string> = {
