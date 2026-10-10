@@ -2,6 +2,7 @@ import {
   ACTION_CATEGORIES,
   ACTION_SEVERITIES,
   ACTION_STATUSES,
+  CERT_STATUSES,
   COMPETENCY_CATEGORIES,
   CRITERIA_TYPES,
   DIFFICULTIES,
@@ -12,6 +13,7 @@ import {
   PARTICIPANT_ROLES,
   SECTORS,
   USER_ROLES,
+  type CertRequirements,
   type DrillScenario,
   type ObjectiveDraft,
   type ObjectiveTarget,
@@ -350,6 +352,40 @@ export const improvementActions = pgTable(
   ],
 );
 
+// ─── certifications ───────────────────────────────────────────────────────────
+export const certifications = pgTable("certifications", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  requirements: jsonb("requirements").$type<CertRequirements>().notNull().default({}),
+  validForMonths: integer("valid_for_months").notNull().default(12),
+  badgeColor: text("badge_color").notNull().default("blue"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: createdAt(),
+});
+
+export const userCertifications = pgTable(
+  "user_certifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    certificationId: text("certification_id")
+      .notNull()
+      .references(() => certifications.id, { onDelete: "cascade" }),
+    earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    score: numeric("score"),
+    drillIds: jsonb("drill_ids").$type<string[]>().notNull().default([]),
+    status: text("status", { enum: CERT_STATUSES }).notNull().default("active"),
+  },
+  (t) => [
+    index("user_certifications_user_id_idx").on(t.userId),
+    check("user_certifications_status_check", oneOf(t.status, CERT_STATUSES)),
+  ],
+);
+
 // ─── drill_lifecycle_templates ──────────────────────────────────────────────
 export interface LifecycleStage {
   id: string;
@@ -428,6 +464,14 @@ export const competencyAreasRelations = relations(competencyAreas, ({ many }) =>
   scores: many(drillScores),
 }));
 
+export const userCertificationsRelations = relations(userCertifications, ({ one }) => ({
+  user: one(users, { fields: [userCertifications.userId], references: [users.id] }),
+  certification: one(certifications, {
+    fields: [userCertifications.certificationId],
+    references: [certifications.id],
+  }),
+}));
+
 export const drillParticipantsRelations = relations(drillParticipants, ({ one }) => ({
   drill: one(drills, { fields: [drillParticipants.drillId], references: [drills.id] }),
   user: one(users, { fields: [drillParticipants.userId], references: [users.id] }),
@@ -477,3 +521,6 @@ export type CompetencyArea = typeof competencyAreas.$inferSelect;
 export type NewCompetencyArea = typeof competencyAreas.$inferInsert;
 export type DrillTemplateRow = typeof drillTemplates.$inferSelect;
 export type NewDrillTemplateRow = typeof drillTemplates.$inferInsert;
+export type Certification = typeof certifications.$inferSelect;
+export type UserCertification = typeof userCertifications.$inferSelect;
+export type NewUserCertification = typeof userCertifications.$inferInsert;

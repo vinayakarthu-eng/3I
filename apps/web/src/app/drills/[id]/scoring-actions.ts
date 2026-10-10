@@ -1,6 +1,7 @@
 "use server";
 
 import type { ActionResult } from "@/app/drills/actions";
+import { evaluateCertifications } from "@/lib/certifications";
 import { getCurrentUser } from "@/lib/current-user";
 import { and, db, drills, eq } from "@drillforce/db";
 import { autoScoreDrill, recordManualScores } from "@drillforce/scoring-engine";
@@ -54,6 +55,7 @@ export async function submitManualScores(
   }
   try {
     const result = await recordManualScores(drillId, ctx.user.id, parsed.data);
+    if (result) await evaluateCertifications(ctx.drill.orgId);
     refresh(drillId);
     return { ok: true, data: { finalized: !!result, composite: result?.composite ?? null } };
   } catch (err) {
@@ -69,6 +71,7 @@ export async function rerunAutoScoring(drillId: string): Promise<ActionResult<{ 
   }
   try {
     const result = await autoScoreDrill(drillId);
+    if (result.finalized) await evaluateCertifications(ctx.drill.orgId);
     refresh(drillId);
     return { ok: true, data: { scored: result.scored } };
   } catch (err) {

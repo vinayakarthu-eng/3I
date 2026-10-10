@@ -22,6 +22,7 @@ import {
   Check,
   ChevronsUpDown,
   Activity,
+  Award,
   ClipboardList,
   FileBarChart,
   LayoutDashboard,
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { href: "/scenarios", label: "Scenarios", icon: LayoutTemplate },
   { href: "/readiness", label: "Readiness", icon: Activity },
   { href: "/actions", label: "Actions", icon: ListChecks },
+  { href: "/certifications", label: "Certifications", icon: Award },
   { href: "/reports", label: "Reports", icon: FileBarChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;

@@ -48,6 +48,57 @@ export type CompetencyCategory = (typeof COMPETENCY_CATEGORIES)[number];
 export const DIFFICULTIES = ["beginner", "intermediate", "advanced"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
+export const CERT_STATUSES = ["active", "expired", "revoked"] as const;
+export type CertStatus = (typeof CERT_STATUSES)[number];
+
+/** Requirements stored in certifications.requirements (jsonb). */
+export interface CertRequirements {
+  minDrills?: number;
+  minAvgScore?: number;
+  minICDrills?: number;
+  allCompetenciesMin?: number;
+  competencyThresholds?: { competency: string; min: number }[];
+}
+
+export interface UserCertStats {
+  /** scored drills participated in */
+  drills: number;
+  /** scored drills where the user was incident_commander */
+  icDrills: number;
+  /** mean composite across participated drills */
+  avgScore: number | null;
+  /** competency name -> average score */
+  byCompetency: Record<string, number>;
+}
+
+/** Each requirement as a 0..1 satisfaction ratio (used for eligibility + progress bars). */
+function certRequirementRatios(req: CertRequirements, s: UserCertStats): number[] {
+  const ratios: number[] = [];
+  const ratio = (have: number, need: number) => (need <= 0 ? 1 : Math.min(1, have / need));
+  if (req.minDrills != null) ratios.push(ratio(s.drills, req.minDrills));
+  if (req.minICDrills != null) ratios.push(ratio(s.icDrills, req.minICDrills));
+  if (req.minAvgScore != null) ratios.push(ratio(s.avgScore ?? 0, req.minAvgScore));
+  for (const t of req.competencyThresholds ?? []) {
+    ratios.push(ratio(s.byCompetency[t.competency] ?? 0, t.min));
+  }
+  if (req.allCompetenciesMin != null) {
+    for (const name of COMPETENCY_AREAS.map((c) => c.name)) {
+      ratios.push(ratio(s.byCompetency[name] ?? 0, req.allCompetenciesMin));
+    }
+  }
+  return ratios.length ? ratios : [1];
+}
+
+export function isCertEligible(req: CertRequirements, s: UserCertStats): boolean {
+  return certRequirementRatios(req, s).every((r) => r >= 1);
+}
+
+/** 0..1 overall progress toward a certification. */
+export function certProgress(req: CertRequirements, s: UserCertStats): number {
+  const ratios = certRequirementRatios(req, s);
+  return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+}
+
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
@@ -69,6 +120,61 @@ export const COMPETENCY_AREAS: CompetencyAreaSeed[] = [
   { name: "External Communication", description: "Customer comms, stakeholder updates, status page management", category: "communication", sortOrder: 3 },
   { name: "Incident Command", description: "Leadership, decision-making, delegation, prioritization", category: "leadership", sortOrder: 4 },
   { name: "Process Adherence", description: "Following runbooks, documenting actions, post-incident procedures", category: "process", sortOrder: 5 },
+];
+
+export interface CertificationSeed {
+  id: string;
+  name: string;
+  description: string;
+  requirements: CertRequirements;
+  validForMonths: number;
+  badgeColor: string;
+}
+
+/** The 4 seeded certifications. */
+export const CERTIFICATIONS: CertificationSeed[] = [
+  {
+    id: "incident-responder",
+    name: "Incident Responder",
+    description: "Complete 3 drills with an average score of at least 60.",
+    requirements: { minDrills: 3, minAvgScore: 60 },
+    validForMonths: 12,
+    badgeColor: "blue",
+  },
+  {
+    id: "incident-commander",
+    name: "Incident Commander",
+    description: "Complete 5 drills as Incident Commander with avg score ≥70 and Incident Command ≥75.",
+    requirements: {
+      minICDrills: 5,
+      minAvgScore: 70,
+      competencyThresholds: [{ competency: "Incident Command", min: 75 }],
+    },
+    validForMonths: 12,
+    badgeColor: "purple",
+  },
+  {
+    id: "crisis-communication-specialist",
+    name: "Crisis Communication Specialist",
+    description: "Complete 3 drills with Internal and External Communication competencies ≥80.",
+    requirements: {
+      minDrills: 3,
+      competencyThresholds: [
+        { competency: "Internal Communication", min: 80 },
+        { competency: "External Communication", min: 80 },
+      ],
+    },
+    validForMonths: 12,
+    badgeColor: "green",
+  },
+  {
+    id: "full-spectrum-operator",
+    name: "Full Spectrum Operator",
+    description: "Reach ≥70 in all six competencies across 10 or more drills.",
+    requirements: { minDrills: 10, allCompetenciesMin: 70 },
+    validForMonths: 24,
+    badgeColor: "gold",
+  },
 ];
 
 export const COMPETENCY_CATEGORY_LABELS: Record<CompetencyCategory, string> = {

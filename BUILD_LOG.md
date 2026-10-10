@@ -94,3 +94,22 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
 - Decision: template objectives created via the wizard are not auto-mapped to a competency id
   yet (the form doesn't thread competency through) — they can be set on the Objectives tab.
 - `npm run build` passes; `/scenarios`, `/drills/new?template=*`, `/templates` (307) all OK.
+
+## Phase 5 — Certification Engine ✅
+
+- **Schema** (migration `0006_concerned_gambit`): `certifications` (slug id, requirements jsonb,
+  valid_for_months, badge_color) + `user_certifications` (earned/expires/score/drill_ids/status).
+- **Shared**: `CERTIFICATIONS` (the 4 defs), `CertRequirements`, and pure
+  `isCertEligible` / `certProgress` helpers.
+- **Engine** (`packages/db/src/certifications.ts`): `computeCertStats(db, orgId)` (per-member
+  drills / IC drills / avg score / competency averages) and idempotent
+  `awardCertifications(db, orgId)`. Shared by the seed and the web app.
+- **Auto-award**: web scoring actions call `evaluateCertifications(orgId)` after a drill
+  finalizes; the seed awards eligible members (added participants to the historical drills so
+  Incident Responder is earned — 3 awards seeded).
+- **`/certifications`**: cards per cert with badge, requirements, the current user's
+  earned/in-progress(%)/not-started state, and the list of holders.
+- **`/certifications/[certId]/[userId]`**: print-styled certificate (seal, dates, score, QR
+  placeholder, signature lines) with a Print button.
+- Earned certifications now appear on the readiness profile; sidebar shows **Certifications**.
+- `npm run build` passes; `/certifications` and the certificate route return 200.

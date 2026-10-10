@@ -1,4 +1,5 @@
-import { COMPETENCY_AREAS, DRILL_TEMPLATES } from "@drillforce/shared";
+import { CERTIFICATIONS, COMPETENCY_AREAS, DRILL_TEMPLATES } from "@drillforce/shared";
+import { awardCertifications } from "./src/certifications";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -22,9 +23,22 @@ async function main() {
     truncate table
       improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
       drill_objectives, drill_injects, drills, drill_lifecycle_templates, drill_templates,
-      competency_areas, users, organizations
+      user_certifications, certifications, competency_areas, users, organizations
     restart identity cascade
   `);
+
+  console.log("🎖  Creating certifications…");
+  await db.insert(schema.certifications).values(
+    CERTIFICATIONS.map((cert, i) => ({
+      id: cert.id,
+      name: cert.name,
+      description: cert.description,
+      requirements: cert.requirements,
+      validForMonths: cert.validForMonths,
+      badgeColor: cert.badgeColor,
+      sortOrder: i,
+    })),
+  );
 
   console.log("📚 Creating scenario library…");
   await db.insert(schema.drillTemplates).values(
@@ -483,6 +497,11 @@ async function main() {
       },
       computedAt: endedAt,
     });
+    await db.insert(schema.drillParticipants).values([
+      { drillId: d.id, userId: manager.id, role: "incident_commander", joinedAt: startedAt },
+      { drillId: d.id, userId: participant.id, role: "responder", joinedAt: startedAt },
+      { drillId: d.id, userId: admin.id, role: "observer", joinedAt: startedAt },
+    ]);
     await db.insert(schema.drillEvents).values(statusChange(d.id, "debriefing", "completed", endedAt, admin.id));
   }
 
@@ -510,6 +529,10 @@ async function main() {
       status: "in_progress",
     },
   ]);
+
+  console.log("🏅 Awarding certifications…");
+  const awarded = await awardCertifications(db, org.id);
+  console.log(`   Awarded ${awarded} certification(s).`);
 
   console.log("✅ Seed complete");
   console.log(`   Org: ${org.name} (${org.slug})`);

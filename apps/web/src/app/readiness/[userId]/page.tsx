@@ -5,13 +5,14 @@ import { SkillBadge } from "@/components/readiness/skill-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { listUserCertifications } from "@/lib/certifications";
 import { getCurrentUser } from "@/lib/current-user";
 import { formatDate, formatScore, initials, scoreColor } from "@/lib/format";
 import { listCompetencyAreas } from "@/lib/queries";
 import { getUserReadiness } from "@/lib/readiness";
 import { cn } from "@/lib/utils";
 import { PARTICIPANT_ROLE_LABELS, type ParticipantRole } from "@drillforce/shared";
-import { ArrowLeft, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Award, TrendingDown, TrendingUp } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -26,9 +27,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function UserReadinessPage({ params }: Props) {
   const { org } = await getCurrentUser();
-  const [data, competencies] = await Promise.all([
+  const [data, competencies, certs] = await Promise.all([
     getUserReadiness(org.id, params.userId),
     listCompetencyAreas(),
+    listUserCertifications(params.userId),
   ]);
   if (!data) notFound();
 
@@ -156,6 +158,28 @@ export default async function UserReadinessPage({ params }: Props) {
           })}
         </CardContent>
       </Card>
+
+      {certs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Certifications</CardTitle>
+            <CardDescription>Certifications this member has earned.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {certs.map((c) => (
+              <Link
+                key={c.id}
+                href={`/certifications/${c.certificationId}/${user.id}`}
+                className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+              >
+                <Award className="h-4 w-4 text-amber-500" />
+                <span className="font-medium">{c.name}</span>
+                <span className="text-xs text-muted-foreground">{formatDate(c.earnedAt)}</span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
