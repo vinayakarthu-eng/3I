@@ -5,6 +5,7 @@ import {
   db,
   desc,
   drillEvents,
+  drillInjects,
   drillObjectives,
   drills,
   eq,
@@ -12,6 +13,7 @@ import {
   users,
   type Drill,
 } from "@drillforce/db";
+import { resolveInjectEffect, type InjectType } from "@drillforce/shared";
 import { env } from "./env";
 import { logEvent } from "./events";
 import { buildSystemPrompt, generateIcLine, type IcTask, type TranscriptLine } from "./ic-bot";
@@ -21,6 +23,14 @@ export interface SlackLink {
   channelName: string;
 }
 
+interface PendingInject {
+  id: string;
+  triggerAtMinutes: number;
+  description: string;
+  injectType: string;
+  payload: Record<string, unknown>;
+}
+
 interface Session {
   drillId: string;
   channelId: string;
@@ -28,6 +38,8 @@ interface Session {
   startedAt: Date | null;
   system: string;
   scenarioInjects: string[];
+  /** Timed injects (from drill_injects) that haven't fired yet, by trigger time. */
+  pendingInjects: PendingInject[];
   lastActivityAt: number;
   nextNudgeAfterMs: number;
   busy: boolean;
@@ -69,6 +81,14 @@ export class DrillSessionManager {
       .where(and(eq(drillEvents.drillId, drill.id), eq(drillEvents.eventType, "inject")));
     const postedText = new Set(posted.map((p) => String(p.payload.text ?? "")));
 
+    // Timed injects from drill_injects (the scheduled, service-targeting ones) that
+    // haven't fired yet — the bot fires these automatically at their trigger time.
+    const timed = await db
+      .select()
+      .from(drillInjects)
+      .where(and(eq(drillInjects.drillId, drill.id), eq(drillInjects.fired, false)))
+      .orderBy(asc(drillInjects.triggerAtMinutes), asc(drillInjects.sortOrder));
+
     this.sessions.set(slack.channelId, {
       drillId: drill.id,
       channelId: slack.channelId,
@@ -78,6 +98,13 @@ export class DrillSessionManager {
       scenarioInjects: (drill.scenario?.injects ?? [])
         .map((i) => i.description)
         .filter((d) => !postedText.has(d)),
+      pendingInjects: timed.map((i) => ({
+        id: i.id,
+        triggerAtMinutes: i.triggerAtMinutes,
+        description: i.description,
+        injectType: i.injectType,
+        payload: i.payload ?? {},
+      })),
       lastActivityAt: Date.now(),
       nextNudgeAfterMs: randomQuietDelay(),
       busy: false,
@@ -115,7 +142,39 @@ export class DrillSessionManager {
   }
 
   start() {
-    this.timer = setInterval(() => void this.checkQuietChannels(), 15_000);
+    this.timer = setInterval(() => void this.tick(), 15_000);
+  }
+
+  private async tick() {
+    for (const s of this.sessions.values()) await this.checkTimedInjects(s);
+    await this.checkQuietChannels();
+  }
+
+  /** Fire any scheduled injects whose trigger time has passed. */
+  private async checkTimedInjects(s: Session) {
+    if (!s.startedAt || s.pendingInjects.length === 0) return;
+    const elapsedMin = (Date.now() - s.startedAt.getTime()) / 60000;
+    const due = s.pendingInjects.filter((i) => i.triggerAtMinutes <= elapsedMin);
+    if (!due.length) return;
+    // Remove synchronously so an overlapping tick can't double-fire.
+    s.pendingInjects = s.pendingInjects.filter((i) => i.triggerAtMinutes > elapsedMin);
+    for (const inj of due) await this.fireTimedInject(s, inj);
+  }
+
+  private async fireTimedInject(s: Session, inj: PendingInject) {
+    const effect = resolveInjectEffect(inj.injectType as InjectType, inj.payload);
+    const impact =
+      effect.kind === "comms"
+        ? ""
+        : effect.services.length
+          ? ` _(impacts ${effect.services.join(", ")})_`
+          : "";
+    try {
+      await db.update(drillInjects).set({ fired: true, firedAt: new Date() }).where(eq(drillInjects.id, inj.id));
+      await this.post(s.channelId, `${inj.description}${impact}`, { asInject: true });
+    } catch (err) {
+      console.error("Could not fire timed inject:", err);
+    }
   }
 
   stop() {

@@ -233,6 +233,21 @@ intensity curve to a **per-service model**:
 - Verified via an engine harness (scenario-distinct output + recovery curve) and a deep-incident
   war-room screenshot. Build/typecheck/tests all green.
 
+## Post-build — Slack IC bot wired to the timed-inject system ✅
+
+The Slack IC bot was functional (Claude-powered IC persona: briefs the channel, nudges quiet
+rooms, answers questions in-thread, posts injects, scores hand-off) but only knew about the old
+embedded `scenario.injects`. Wired it to the **`drill_injects`** table that the web execution
+flow and the realistic simulation use:
+
+- On attach, the session loads unfired `drill_injects` ordered by trigger time.
+- The 15s tick now auto-fires any inject whose `trigger_at_minutes` has elapsed — posts it with
+  its **service impact** (from the payload, via `resolveInjectEffect`), marks it `fired`, and logs
+  the event (synchronous removal from the pending list prevents double-fire).
+- The Slack briefing announces how many timed injects will fire; comms injects post without an
+  impact line.
+- Verified with `npm run simulate -w @drillforce/slack-bot` and a full `typecheck` (6/6).
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

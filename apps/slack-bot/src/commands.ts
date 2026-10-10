@@ -36,7 +36,7 @@ export const HELP_TEXT = [
   "*DrillForce commands*",
   "• `/drillforce start <drill-id>` – open a drill channel, brief participants, and start the IC bot",
   "• `/drillforce status` – elapsed time and objectives (run inside a drill channel)",
-  "• `/drillforce inject <description>` – post a scenario inject",
+  "• `/drillforce inject <description>` – post an ad-hoc inject (scheduled injects fire automatically)",
   "• `/drillforce end` – end the drill and hand it off for scoring",
 ].join("\n");
 
@@ -172,6 +172,7 @@ async function startDrill(arg: string, ctx: CommandContext) {
   });
 
   await ctx.sessions.attach(updated, { channelId: channel.id, channelName: channel.name });
+  const injectCount = ctx.sessions.get(channel.id)?.pendingInjects.length ?? 0;
 
   const briefing = [
     `:rotating_light: *${drill.name}* — ${DRILL_TYPE_LABELS[drill.type]} exercise`,
@@ -186,6 +187,9 @@ async function startDrill(arg: string, ctx: CommandContext) {
       ? participants.map((p) => `• ${p.name} — ${PARTICIPANT_ROLE_LABELS[p.role]}`)
       : ["• No participants assigned"]),
     "",
+    injectCount
+      ? `:stopwatch: *${injectCount} timed inject${injectCount === 1 ? "" : "s"}* will fire automatically as the drill progresses.`
+      : null,
     "*This drill is now ACTIVE. All actions in this channel are being recorded.*",
     `Drill details: ${env.webAppUrl}/drills/${drill.id}`,
   ]
