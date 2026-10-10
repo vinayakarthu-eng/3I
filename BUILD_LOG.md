@@ -56,3 +56,21 @@ Tracking the 10-phase UptimeLabs parity build. Decisions are documented here per
   `getDrillCompetencyStats`).
 - **Objectives tab**: competency selector in the add/edit dialog; competency shown on each card.
 - `npm run build` passes.
+
+## Phase 3 — Team Readiness Dashboard ✅
+
+- **Queries** (`src/lib/readiness.ts`): per-member competency averages, org overview
+  (drills run / avg score / active members / competency coverage %), team competency trend,
+  and a full per-user profile. A member's competency score = avg of their participated drills'
+  competency scores.
+- **`/readiness`**: period selector (7d/30d/90d/all via `?period=`), summary cards, a
+  color-banded heatmap (members × 6 competencies, cells link to the profile) with skill-level
+  badges, and a team competency trend chart (one line per competency).
+- **`/readiness/[userId]`**: personal radar, strengths/gaps (top/bottom 2), per-competency
+  skill badges, drill-history table, and a personal competency trend chart.
+- **Shared components**: `SkillBadge`, `CompetencyRadar`, `CompetencyLineChart`, `PeriodTabs`
+  (reused by Phase 5/8).
+- Added **Readiness** to the sidebar.
+- Decision: period filter is a SQL fragment comparing against an ISO string — the `postgres`
+  driver can't bind a JS `Date` against a `coalesce()` expression.
+- `npm run build` passes; `/readiness`, `?period=*`, and `/readiness/[userId]` return 200.
