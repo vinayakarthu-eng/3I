@@ -33,6 +33,7 @@ export default async function SimulatePage({ params }: Props) {
     description: i.description,
     triggerAtMinutes: i.triggerAtMinutes,
     injectType: i.injectType,
+    payload: i.payload ?? {},
     fired: i.fired,
   }));
 

@@ -39,6 +39,7 @@ export default async function LivePage({ params }: Props) {
     description: i.description,
     triggerAtMinutes: i.triggerAtMinutes,
     injectType: i.injectType,
+    payload: i.payload ?? {},
     fired: i.fired,
   }));
 

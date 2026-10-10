@@ -19,7 +19,10 @@ import {
   aggregateMetrics,
   generateLogs,
   generateServiceMetrics,
+  resolveInjectEffect,
   seedMetricWindow,
+  type FiredInject,
+  type InjectType,
   type LogLine,
   type MetricSample,
   type ScenarioType,
@@ -50,7 +53,13 @@ export interface InjectItem {
   description: string;
   triggerAtMinutes: number;
   injectType: string;
+  payload: Record<string, unknown>;
   fired: boolean;
+}
+
+function sevRank(s: string | undefined): number {
+  const m = s?.match(/SEV-(\d)/);
+  return m ? Number(m[1]) : 99;
 }
 
 export interface LiveConfig {
@@ -94,17 +103,29 @@ export function WarRoom({
   );
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [services, setServices] = useState<ServiceMetric[]>(() =>
-    generateServiceMetrics(scenarioType, 0, { firstInjectAtMin: null, firedCount: 0, mitigationStartMin: null }),
+    generateServiceMetrics(scenarioType, 0, {
+      firstInjectAtMin: null,
+      firedCount: 0,
+      firedInjects: [],
+      mitigationStartMin: null,
+    }),
   );
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [firedIds, setFiredIds] = useState<Set<string>>(
     () => new Set(injects.filter((i) => i.fired).map((i) => i.id)),
+  );
+  const [firedInjects, setFiredInjects] = useState<FiredInject[]>(() =>
+    injects
+      .filter((i) => i.fired)
+      .map((i) => ({ atMin: i.triggerAtMinutes, effect: resolveInjectEffect(i.injectType as InjectType, i.payload) })),
   );
   const [latestAlert, setLatestAlert] = useState<string | null>(null);
   const [mitigationStartMin, setMitigationStartMin] = useState<number | null>(null);
 
   const firedIdsRef = useRef(firedIds);
   firedIdsRef.current = firedIds;
+  const firedInjectsRef = useRef(firedInjects);
+  firedInjectsRef.current = firedInjects;
   const mitigationRef = useRef(mitigationStartMin);
   mitigationRef.current = mitigationStartMin;
 
@@ -121,12 +142,17 @@ export function WarRoom({
       const dueNow = injects.filter(
         (i) => i.triggerAtMinutes <= minutes && !firedIdsRef.current.has(i.id),
       );
+      const newlyFired: FiredInject[] = dueNow.map((inj) => ({
+        atMin: minutes,
+        effect: resolveInjectEffect(inj.injectType as InjectType, inj.payload),
+      }));
       if (dueNow.length) {
         setFiredIds((prevSet) => {
           const copy = new Set(prevSet);
           dueNow.forEach((i) => copy.add(i.id));
           return copy;
         });
+        setFiredInjects((prev) => [...prev, ...newlyFired]);
         for (const inj of dueNow) {
           setLatestAlert(inj.description);
           setMessages((m) => [
@@ -149,6 +175,7 @@ export function WarRoom({
       const state: SimState = {
         firstInjectAtMin: firstInjectAt,
         firedCount,
+        firedInjects: [...firedInjectsRef.current, ...newlyFired],
         mitigationStartMin: mitigationRef.current,
       };
 
@@ -175,6 +202,10 @@ export function WarRoom({
   function applyInjectLocally(inj: InjectItem) {
     if (firedIdsRef.current.has(inj.id)) return;
     setFiredIds((p) => new Set(p).add(inj.id));
+    setFiredInjects((prev) => [
+      ...prev,
+      { atMin: elapsed / 60, effect: resolveInjectEffect(inj.injectType as InjectType, inj.payload) },
+    ]);
     setLatestAlert(inj.description);
     setMessages((m) => [
       ...m,
@@ -223,6 +254,12 @@ export function WarRoom({
   const anyDegraded = services.some((s) => s.status !== "healthy");
   const incidentActive = latestAlert !== null && !(recovering && !anyDegraded);
   const isObserver = live?.role === "observer" || live?.role === "evaluator";
+
+  // SEV escalates to the worst severity among fired injects.
+  const currentSeverity = firedInjects.reduce(
+    (best, fi) => (sevRank(fi.effect.severity) < sevRank(best) ? fi.effect.severity! : best),
+    severity,
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -279,7 +316,7 @@ export function WarRoom({
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span className="truncate font-medium">🚨 ALERT: {latestAlert}</span>
           <span className="ml-auto shrink-0 rounded bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
-            {severity || "SEV-1"}
+            {currentSeverity || "SEV-1"}
           </span>
         </div>
       )}
@@ -389,12 +426,24 @@ function InjectControlSheet({
           )}
           {injects.map((inj) => {
             const fired = firedIds.has(inj.id);
+            const effect = resolveInjectEffect(inj.injectType as InjectType, inj.payload);
+            const targets = effect.kind === "comms" ? [] : effect.services;
             return (
               <div key={inj.id} className="flex items-start gap-3 rounded-md border p-3">
                 <span className="mt-0.5 shrink-0 font-mono text-xs text-muted-foreground">
                   T+{inj.triggerAtMinutes}m
                 </span>
-                <span className="min-w-0 flex-1 text-sm">{inj.description}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm">{inj.description}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {effect.kind === "comms"
+                      ? "Stakeholder pressure — no metric impact"
+                      : targets.length
+                        ? `Impacts: ${targets.join(", ")}`
+                        : "Impacts: primary service"}
+                    {effect.severity ? ` · ${effect.severity}` : ""}
+                  </p>
+                </div>
                 <Button
                   size="sm"
                   variant={fired ? "ghost" : "outline"}

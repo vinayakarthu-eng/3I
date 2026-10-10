@@ -314,28 +314,29 @@ async function main() {
     triggerAtMinutes: number,
     injectType: "metric_spike" | "log_flood" | "alert" | "comms",
     description: string,
-  ) => ({ drillId, sortOrder: order, triggerAtMinutes, injectType, description });
+    payload: Record<string, unknown> = {},
+  ) => ({ drillId, sortOrder: order, triggerAtMinutes, injectType, description, payload });
   await db.insert(schema.drillInjects).values([
-    // Credential leak (draft)
-    inject(draftDrill.id, 0, 0, "alert", "Security researcher emails security@ with a link to the leaked key."),
-    inject(draftDrill.id, 1, 4, "log_flood", "Unusual API traffic detected from an unknown IP range (203.0.113.0/24)."),
-    inject(draftDrill.id, 2, 8, "comms", "Legal asks whether customer data was accessed."),
-    inject(draftDrill.id, 3, 12, "alert", "Second key from the same repo confirmed active in production."),
-    inject(draftDrill.id, 4, 18, "comms", "PR drafts a holding statement and needs a go/no-go."),
-    // Database failover (scheduled)
-    inject(scheduledDrill.id, 0, 0, "alert", "Database primary reporting high replication lag."),
-    inject(scheduledDrill.id, 1, 3, "metric_spike", "Connection pool exhaustion — new connections timing out."),
-    inject(scheduledDrill.id, 2, 5, "metric_spike", "Application error rate exceeding 40%."),
-    inject(scheduledDrill.id, 3, 8, "comms", "Customer support: 200+ tickets in the last 5 minutes."),
-    inject(scheduledDrill.id, 4, 12, "comms", "CEO Slack message: board meeting in 1 hour, need a status update."),
-    inject(scheduledDrill.id, 5, 18, "log_flood", "Replica promotion stalling — quorum not reached."),
-    // DNS outage (completed)
-    inject(completedDrill.id, 0, 0, "alert", "Synthetic monitors report resolution failures for acme.com."),
-    inject(completedDrill.id, 1, 4, "metric_spike", "Request volume collapses to near zero across all regions."),
-    inject(completedDrill.id, 2, 8, "comms", "Social media reports that the site is down."),
-    inject(completedDrill.id, 3, 12, "log_flood", "All services logging name-resolution failures."),
-    inject(completedDrill.id, 4, 20, "comms", "Secondary DNS provider propagation is slower than expected."),
-    inject(completedDrill.id, 5, 30, "alert", "Status page SLA breach imminent — exec update requested."),
+    // Credential leak (draft) — security signal lives in logs; metrics stay near normal.
+    inject(draftDrill.id, 0, 0, "alert", "Security researcher emails security@ with a link to the leaked key.", { services: ["api-gateway"], severity: "SEV-2", error: 6 }),
+    inject(draftDrill.id, 1, 4, "log_flood", "Unusual API traffic detected from an unknown IP range (203.0.113.0/24).", { services: ["api-gateway"], error: 10, latency: 200 }),
+    inject(draftDrill.id, 2, 8, "comms", "Legal asks whether customer data was accessed.", { kind: "comms" }),
+    inject(draftDrill.id, 3, 12, "alert", "Second key from the same repo confirmed active in production.", { services: ["api-gateway"], severity: "SEV-1", error: 12 }),
+    inject(draftDrill.id, 4, 18, "comms", "PR drafts a holding statement and needs a go/no-go.", { kind: "comms" }),
+    // Database failover (scheduled) — targets DB first, cascades to API.
+    inject(scheduledDrill.id, 0, 0, "alert", "Database primary reporting high replication lag.", { services: ["db-replica"], severity: "SEV-2", error: 30, latency: 3000 }),
+    inject(scheduledDrill.id, 1, 3, "metric_spike", "Connection pool exhaustion — new connections timing out.", { services: ["db-primary"], severity: "SEV-1", error: 92, latency: 5000, reqFactor: 0.4 }),
+    inject(scheduledDrill.id, 2, 5, "metric_spike", "Application error rate exceeding 40%.", { services: ["api-gateway"], error: 60, latency: 1800 }),
+    inject(scheduledDrill.id, 3, 8, "comms", "Customer support: 200+ tickets in the last 5 minutes.", { kind: "comms" }),
+    inject(scheduledDrill.id, 4, 12, "comms", "CEO Slack message: board meeting in 1 hour, need a status update.", { kind: "comms" }),
+    inject(scheduledDrill.id, 5, 18, "log_flood", "Replica promotion stalling — quorum not reached.", { services: ["db-replica"], error: 50, latency: 2500 }),
+    // DNS outage (completed) — collapses requests across the board.
+    inject(completedDrill.id, 0, 0, "alert", "Synthetic monitors report resolution failures for acme.com.", { services: ["cdn-edge"], severity: "SEV-1", error: 95, latency: 2000, reqFactor: 0.05 }),
+    inject(completedDrill.id, 1, 4, "metric_spike", "Request volume collapses to near zero across all regions.", { services: ["api-gateway", "cdn-edge"], error: 95, latency: 2000, reqFactor: 0.05 }),
+    inject(completedDrill.id, 2, 8, "comms", "Social media reports that the site is down.", { kind: "comms" }),
+    inject(completedDrill.id, 3, 12, "log_flood", "All services logging name-resolution failures.", { services: ["db-primary", "cache", "mq-worker"], error: 85, latency: 1500, reqFactor: 0.1 }),
+    inject(completedDrill.id, 4, 20, "comms", "Secondary DNS provider propagation is slower than expected.", { kind: "comms" }),
+    inject(completedDrill.id, 5, 30, "alert", "Status page SLA breach imminent — exec update requested.", { kind: "comms", severity: "SEV-1" }),
   ]);
 
   console.log("🙋 Adding participants…");
