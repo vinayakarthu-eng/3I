@@ -71,6 +71,13 @@
       "when": 1791622075550,
       "tag": "0009_unusual_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791657108977,
+      "tag": "0010_complex_wonder_man",
+      "breakpoints": true
     }
   ]
 }

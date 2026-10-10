@@ -248,6 +248,27 @@ flow and the realistic simulation use:
   impact line.
 - Verified with `npm run simulate -w @drillforce/slack-bot` and a full `typecheck` (6/6).
 
+## Headless direction — API-first foundation (in progress)
+
+Guiding principle: the HTTP API is the product's contract; the Next front is the reference
+client. Rollout is additive — the API grows alongside the working UI, which migrates to it later.
+
+- **`packages/core`** — new framework-agnostic domain layer. Every operation takes an explicit
+  `Ctx = { orgId, userId }` (no `getCurrentUser`). First operations: `listDrills`, `getDrill`,
+  `listDrillInjects`, `listScenarios`/`getScenario`, `getReadiness`, plus `authenticateKey` /
+  `generateApiKey` and a typed `ApiError`.
+- **`api_keys` table** (migration `0010`) — hashed, org-scoped keys. `Authorization: Bearer
+  df_live_…`. The seed mints one and prints it once.
+- **REST at `/api/v1/*`** (Next route handlers over core): `GET /api/v1` (public discovery),
+  `/drills`, `/drills/:id`, `/drills/:id/injects`, `/scenarios`, `/readiness`. A `withApiKey`
+  wrapper authenticates and maps results/errors to a `{ data } | { error }` envelope.
+- Verified with curl: 401 without/with a bad key; authed reads return org-scoped JSON.
+  `typecheck` 7/7, `build` compiles all routes.
+- **Next:** write endpoints (create drill, change status, submit scores, fire inject) in core +
+  POST routes; API-key management UI in Settings; a typed `packages/sdk`; migrate the web app and
+  Slack bot to consume the API; OpenAPI spec. Standalone `apps/api` is a lift-and-shift later since
+  the handlers are thin.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

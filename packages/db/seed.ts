@@ -6,6 +6,7 @@ import {
 } from "@drillforce/shared";
 import { awardCertifications } from "./src/certifications";
 import { evaluateOrgCompliance } from "./src/compliance";
+import crypto from "node:crypto";
 import { config } from "dotenv";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -30,7 +31,7 @@ async function main() {
       improvement_actions, drill_composite, drill_scores, drill_events, drill_participants,
       drill_objectives, drill_injects, drills, drill_lifecycle_templates, drill_templates,
       user_certifications, certifications, drill_compliance_evidence, compliance_requirements,
-      compliance_frameworks, competency_areas, users, organizations
+      compliance_frameworks, competency_areas, api_keys, users, organizations
     restart identity cascade
   `);
 
@@ -566,9 +567,21 @@ async function main() {
   console.log("📐 Generating compliance evidence…");
   await evaluateOrgCompliance(db, org.id);
 
+  console.log("🔑 Creating API key…");
+  const secret = crypto.randomBytes(24).toString("hex");
+  const rawKey = `df_live_${secret}`;
+  await db.insert(schema.apiKeys).values({
+    orgId: org.id,
+    name: "Seed key",
+    prefix: `df_live_${secret.slice(0, 6)}`,
+    hashedKey: crypto.createHash("sha256").update(rawKey).digest("hex"),
+    createdBy: admin.id,
+  });
+
   console.log("✅ Seed complete");
   console.log(`   Org: ${org.name} (${org.slug})`);
   console.log(`   Current user: ${admin.name} <${admin.email}>`);
+  console.log(`   API key (shown once): ${rawKey}`);
   await client.end();
 }
 

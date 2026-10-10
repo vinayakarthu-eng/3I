@@ -438,6 +438,27 @@ export const drillComplianceEvidence = pgTable(
   ],
 );
 
+// ─── api_keys ───────────────────────────────────────────────────────────────
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Human-readable prefix shown in the UI, e.g. "df_live_a1b2c3". */
+    prefix: text("prefix").notNull(),
+    /** SHA-256 of the full key; the raw key is shown once at creation. */
+    hashedKey: text("hashed_key").notNull().unique(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_keys_org_id_idx").on(t.orgId), index("api_keys_hashed_key_idx").on(t.hashedKey)],
+);
+
 // ─── webhooks ───────────────────────────────────────────────────────────────
 export const webhooks = pgTable(
   "webhooks",
@@ -636,3 +657,5 @@ export type DrillComplianceEvidence = typeof drillComplianceEvidence.$inferSelec
 export type Webhook = typeof webhooks.$inferSelect;
 export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
