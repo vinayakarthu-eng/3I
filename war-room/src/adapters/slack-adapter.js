@@ -11,7 +11,12 @@ const { App } = boltPkg;
 export class SlackAdapter extends BaseAdapter {
   constructor({ botToken, appToken, signingSecret, hooks }) {
     super("slack");
-    this.app = new App({ token: botToken, appToken, signingSecret, socketMode: true });
+    this.app = new App({
+      token: botToken,
+      appToken,
+      socketMode: true,
+      ...(signingSecret ? { signingSecret } : {}),
+    });
     this.client = this.app.client;
     this.hooks = hooks; // { startDrill, sitrep, stopDrill }
     this.botUserId = null;

@@ -31,8 +31,9 @@ function scenarioForAlert(alert = {}) {
   return alert.scenario || "database_failover";
 }
 
-const slackReady =
-  !!process.env.SLACK_BOT_TOKEN && !!process.env.SLACK_APP_TOKEN && !!process.env.SLACK_SIGNING_SECRET;
+// Socket Mode needs only the bot token + app-level token; the signing secret is
+// optional (it's for HTTP request verification, which Socket Mode doesn't use).
+const slackReady = !!process.env.SLACK_BOT_TOKEN && !!process.env.SLACK_APP_TOKEN;
 
 // ─── WarRoom controller ─────────────────────────────────────────────────────
 class WarRoom {
