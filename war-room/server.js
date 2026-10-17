@@ -232,6 +232,11 @@ async function boot() {
       });
       const auth = await slack.start();
       warRoom.addAdapter(slack);
+      const unknown = await slack.unknownUsers(ONCALL);
+      if (unknown.length) {
+        console.warn(`\n⚠️  SLACK_ONCALL has ids that aren't members of ${auth.team}: ${unknown.join(", ")} — they won't be invited or paged.`);
+        console.warn(`   Find yours in Slack: profile → ⋮ → "Copy member ID".`);
+      }
       warRoom.mode = "live";
       console.log(`\n✅ LIVE SLACK MODE — connected as @${auth.user} in ${auth.team}`);
     } catch (err) {

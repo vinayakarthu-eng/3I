@@ -69,11 +69,31 @@ export class SlackAdapter extends BaseAdapter {
       await this.client.conversations.setTopic({ channel: this.channel.id, topic }).catch(() => {});
     }
     if (invite.length) {
-      await this.client.conversations
-        .invite({ channel: this.channel.id, users: invite.join(",") })
-        .catch(() => {});
+      // force: invite everyone valid even if some ids are bad — and say which ones failed,
+      // otherwise responders silently never see the channel.
+      try {
+        const res = await this.client.conversations.invite({ channel: this.channel.id, users: invite.join(","), force: true });
+        for (const e of res.errors ?? []) console.warn(`[slack] couldn't invite ${e.user}: ${e.error}`);
+      } catch (err) {
+        const errors = err.data?.errors ?? [{ user: invite.join(","), error: err.data?.error ?? err.message }];
+        for (const e of errors) if (e.error !== "already_in_channel") console.warn(`[slack] couldn't invite ${e.user}: ${e.error}`);
+      }
     }
     return this.channel;
+  }
+
+  /** Member ids from `ids` that don't exist in this workspace (e.g. a SLACK_ONCALL typo). */
+  async unknownUsers(ids) {
+    const unknown = [];
+    for (const id of ids) {
+      try {
+        const res = await this.client.users.info({ user: id });
+        if (res.user?.deleted) unknown.push(`${id} (deactivated)`);
+      } catch {
+        unknown.push(id);
+      }
+    }
+    return unknown;
   }
 
   async send(message) {
