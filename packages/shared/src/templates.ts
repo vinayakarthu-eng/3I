@@ -1,3 +1,4 @@
+import { defaultSignal, type SignalPlan } from "./signals";
 import type {
   CriteriaType,
   Difficulty,
@@ -71,7 +72,88 @@ const accuracy = (description: string, expected_outcome: string, weight = 2, com
   competency,
 });
 
+const signal = (kind: SignalPlan["kind"], overrides: Partial<SignalPlan> = {}): SignalPlan => {
+  const base = defaultSignal(kind);
+  return { ...base, ...overrides, params: { ...base.params, ...overrides.params } };
+};
+
 export const DRILL_TEMPLATES: DrillTemplate[] = [
+  // ─── Monitoring drills: real telemetry injected into Datadog ───────────────
+  {
+    id: "app-monitoring-checkout-errors",
+    name: "Application Monitoring: Checkout Error Surge",
+    sector: "technology",
+    type: "functional",
+    description:
+      "Inject a realistic error surge into checkout-api — failing requests, slow responses, error logs and a P1 monitor — and validate that responders detect it in Datadog APM, find the failing dependency, and mitigate.",
+    estimatedDurationMinutes: 30,
+    difficulty: "intermediate",
+    basedOn: "Modelled on payment-dependency outages behind 5xx surges in e-commerce checkouts",
+    isQuickDrill: false,
+    competencyAreasTested: ["Incident Scoping", "Incident Mechanics", "Internal Communication"],
+    scenario: {
+      summary: "checkout-api starts failing as its payments-service dependency times out during peak traffic.",
+      scenarioType: "high_traffic",
+      severity: "SEV-2",
+      monitoringDomain: "application",
+      injects: [
+        { at_minute: 0, description: "Datadog monitor: checkout-api error rate above 5%." },
+        { at_minute: 2, description: "p95 latency on GET /api/cart crosses 2s." },
+        { at_minute: 4, description: "payments-service logging gateway timeouts." },
+      ],
+      expected_actions: ["Acknowledge the monitor", "Open the checkout-api APM service page", "Trace failures to payments-service", "Mitigate (fail open / disable feature)", "Post an internal update"],
+      signals: [
+        signal("alert_event"),
+        signal("http_errors"),
+        signal("latency_spike"),
+        signal("error_logs"),
+      ],
+    },
+    objectives: [
+      tta("Acknowledge the error-rate monitor within 3 minutes", 3, 3, "Incident Scoping"),
+      accuracy("Identify the failing dependency from traces", "payments-service gateway timeouts are causing checkout-api 5xx responses", 3, "Incident Scoping"),
+      checklist("Work the investigation in APM", ["Open checkout-api service page", "Filter error traces", "Inspect a failing trace", "Correlate with payments-service logs"], 2, "Incident Mechanics"),
+      quality("Internal status update is clear and accurate", ["Clarity", "Accuracy", "Timeliness"], 1, "Internal Communication"),
+    ],
+  },
+  {
+    id: "db-monitoring-primary-failover",
+    name: "Database Monitoring: Primary Database Failure",
+    sector: "technology",
+    type: "functional",
+    description:
+      "Inject a primary Postgres failure — 100% of queries to the primary failing, the connection pool exhausting, replica lag climbing — and validate detection in Datadog Database Monitoring and a safe failover.",
+    estimatedDurationMinutes: 30,
+    difficulty: "advanced",
+    basedOn: "Modelled on primary-loss incidents such as the 2017 GitLab database outage",
+    isQuickDrill: false,
+    competencyAreasTested: ["Incident Scoping", "Incident Mechanics", "Incident Command"],
+    scenario: {
+      summary: "The primary Postgres instance for the orders database stops accepting queries during peak traffic.",
+      scenarioType: "database_failover",
+      severity: "SEV-1",
+      monitoringDomain: "database",
+      injects: [
+        { at_minute: 0, description: "Datadog monitor: postgres-primary query error rate at 100%." },
+        { at_minute: 1, description: "checkout-api connection pool exhausted (200/200)." },
+        { at_minute: 3, description: "Replica lag climbing past 20s — promotion will lose writes." },
+      ],
+      expected_actions: ["Acknowledge the monitor", "Confirm the primary is down", "Assess replica lag", "Decide and execute failover", "Verify writes recover"],
+      signals: [
+        signal("alert_event", { service: "postgres-primary", params: { monitorName: "[P1] postgres-primary query error rate at 100%", priority: "P1" } }),
+        signal("db_query_failures"),
+        signal("db_connection_exhaustion"),
+        signal("replica_lag"),
+      ],
+    },
+    objectives: [
+      tta("Acknowledge the database monitor within 3 minutes", 3, 3, "Incident Scoping"),
+      accuracy("Pinpoint the failing database from APM/DBM", "postgres-primary (orders) is failing 100% of queries; the replica is healthy but lagging", 3, "Incident Scoping"),
+      checklist("Execute the failover safely", ["Confirm primary down", "Check replica lag", "Promote replica", "Repoint application", "Verify writes"], 3, "Incident Mechanics"),
+      quality("Go/no-go decision is explicit and owned", ["Clarity", "Risk awareness", "Ownership"], 1, "Incident Command"),
+    ],
+  },
+
   // ─── Technology (8) ──────────────────────────────────────────────────────
   {
     id: "database-failover",

@@ -14,8 +14,11 @@ import {
   INJECT_TYPES,
   PARTICIPANT_ROLES,
   SECTORS,
+  SIGNAL_KINDS,
+  SIGNAL_PATTERNS,
   USER_ROLES,
   type CertRequirements,
+  type SignalParams,
   type ComplianceReqConfig,
   type DrillScenario,
   type ObjectiveDraft,
@@ -459,6 +462,53 @@ export const apiKeys = pgTable(
   (t) => [index("api_keys_org_id_idx").on(t.orgId), index("api_keys_hashed_key_idx").on(t.hashedKey)],
 );
 
+// ─── drill_signals ──────────────────────────────────────────────────────────
+export const SIGNAL_STATUSES = ["planned", "running", "completed", "stopped", "failed"] as const;
+export type SignalStatus = (typeof SIGNAL_STATUSES)[number];
+
+/** Telemetry the injection engine has emitted for one stream so far. */
+export interface SignalStats {
+  volume: number;
+  failures: number;
+  spans: number;
+  logs: number;
+  metricPoints: number;
+  events: number;
+  /** A few representative log lines / span names, for the UI. */
+  samples?: string[];
+}
+
+/** A drill's injection matrix: one row per signal stream (see shared/signals.ts). */
+export const drillSignals = pgTable(
+  "drill_signals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    drillId: uuid("drill_id")
+      .notNull()
+      .references(() => drills.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: SIGNAL_KINDS }).notNull(),
+    service: text("service").notNull(),
+    ratePerMinute: integer("rate_per_minute").notNull(),
+    failuresPerMinute: integer("failures_per_minute").notNull().default(0),
+    durationMinutes: integer("duration_minutes").notNull(),
+    startOffsetMinutes: integer("start_offset_minutes").notNull().default(0),
+    pattern: text("pattern", { enum: SIGNAL_PATTERNS }).notNull().default("steady"),
+    params: jsonb("params").$type<SignalParams>().notNull().default({}),
+    sortOrder: integer("sort_order").notNull().default(0),
+    status: text("status", { enum: SIGNAL_STATUSES }).notNull().default("planned"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    stats: jsonb("stats").$type<SignalStats>(),
+    lastError: text("last_error"),
+  },
+  (t) => [
+    index("drill_signals_drill_id_idx").on(t.drillId, t.sortOrder),
+    check("drill_signals_kind_check", oneOf(t.kind, SIGNAL_KINDS)),
+    check("drill_signals_pattern_check", oneOf(t.pattern, SIGNAL_PATTERNS)),
+    check("drill_signals_status_check", oneOf(t.status, SIGNAL_STATUSES)),
+  ],
+);
+
 // ─── slack_installations ────────────────────────────────────────────────────
 /** One Slack workspace per org, installed via OAuth ("Add to Slack"). */
 export const slackInstallations = pgTable(
@@ -561,9 +611,14 @@ export const drillsRelations = relations(drills, ({ one, many }) => ({
   events: many(drillEvents),
   scores: many(drillScores),
   injects: many(drillInjects),
+  signals: many(drillSignals),
   improvementActions: many(improvementActions),
   composite: one(drillComposites, { fields: [drills.id], references: [drillComposites.drillId] }),
   reports: many(drillReports),
+}));
+
+export const drillSignalsRelations = relations(drillSignals, ({ one }) => ({
+  drill: one(drills, { fields: [drillSignals.drillId], references: [drills.id] }),
 }));
 
 export const drillInjectsRelations = relations(drillInjects, ({ one }) => ({
@@ -680,6 +735,7 @@ export type DrillComplianceEvidence = typeof drillComplianceEvidence.$inferSelec
 export type Webhook = typeof webhooks.$inferSelect;
 export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type DrillSignal = typeof drillSignals.$inferSelect;
 export type SlackInstallation = typeof slackInstallations.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;

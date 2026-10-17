@@ -319,6 +319,10 @@ export interface DrillScenario {
   scenarioType?: ScenarioType;
   /** SEV level surfaced in the alert banner, e.g. "SEV-1". */
   severity?: string;
+  /** Monitoring drills: which kind (application / database) — see signals.ts. */
+  monitoringDomain?: import("./signals").MonitoringDomain;
+  /** Monitoring drills: the template's default injection matrix (copied to drill_signals). */
+  signals?: import("./signals").SignalPlan[];
 }
 
 /** Target value shapes stored in drill_objectives.target_value */
@@ -370,6 +374,7 @@ export const SECTOR_LABELS: Record<Sector, string> = {
 export * from "./templates";
 export * from "./simulation-engine";
 export * from "./log-generator";
+export * from "./signals";
 import type { ScenarioType } from "./simulation-engine";
 
 /** Valid forward transitions; any non-terminal status may also be cancelled. */
