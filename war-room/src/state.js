@@ -31,6 +31,10 @@ export class DrillState {
     this.milestones = []; // { at, text }
     this.decisions = []; // { at, text }
     this.commsOwner = null; // a human who claimed comms; null = the Comms agent holds it
+    // What the IC has established, so it never re-asks an answered question.
+    this.facts = { impact: null, investigator: null, theory: null, mitigation: null, blockers: [] };
+    this.asked = new Map(); // question key → drill ms when the IC last asked it
+    this.lastIcReply = null;
     this.cadence = { lastStatusAt: 0, lastDigestAt: 0, lastChaseAt: 0, liaisonAsked: false, commsAsked: false, lastHumanAt: 0 };
   }
 

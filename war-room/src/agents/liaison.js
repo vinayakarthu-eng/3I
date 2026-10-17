@@ -39,6 +39,14 @@ export class Liaison extends BaseAgent {
     // A responder mentions a stakeholder or is blocked.
     if (event.type === "user") {
       const { intent } = classify(event.text);
+      if (intent === "blocked") {
+        state.milestone(`Liaison requested access for ${event.name}`);
+        return {
+          text: `${state.mention(event.name)} on it — requesting break-glass access for you now. Meanwhile I'll ask the platform on-call to pull the host logs into the channel.`,
+          job: "Take ownership of getting the responder unblocked (access) and say what you'll do meanwhile.",
+          thread: true,
+        };
+      }
       if (intent === "stakeholder") {
         return {
           text: `${state.mention(event.name)} I'll take that — who exactly should I contact, and what do they need from us (status, ETA, action)?`,

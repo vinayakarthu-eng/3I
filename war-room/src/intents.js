@@ -22,6 +22,9 @@ export function plain(text = "") {
 
 const rx = (s) => new RegExp(s, "i");
 const RULES = [
+  // Direction to the IC wins over everything else.
+  ["move_on", rx(String.raw`\b(move (?:past|on|forward)|focus(?:ing)? on (?:the )?(?:mitigat|fix)|start (?:the )?mitigat|let'?s (?:mitigate|fix it)|skip (?:this|that|it)|stop asking|hung (?:up )?on|stuck on|enough (?:on|about))`)],
+  ["drill_note", rx(String.raw`\b(it'?s a ?drill|this is a ?drill|just a drill)\b`)],
   ["who_is_ic", rx(String.raw`\bwho(?:'s| is)?\s+(?:the\s+)?(?:ic|incident commander|in charge|running this|leading)\b`)],
   ["who_owns", rx(String.raw`\bwho(?:'s| is)?\s+(?:on|owning|handling|taking|looking at|investigating|doing)\b`)],
   ["sitrep", rx(String.raw`\b(sitrep|status\??$|where are we|where do we stand|what'?s (?:the )?status|catch me up|update\?)`)],
@@ -29,9 +32,11 @@ const RULES = [
   ["fixed", rx(String.raw`\b(fix (?:is )?(?:deployed|live|out)|deployed the fix|mitigation (?:applied|in place)|failed over|rolled back|promoted the replica|patch is live)\b`)],
   ["root_cause", rx(String.raw`\b(root cause|found the (?:cause|issue|problem)|caused by|the culprit|it'?s the)\b`)],
   ["proposal", rx(String.raw`\b(i propose|i recommend|i suggest|proposal:|should we|we should|can we|let'?s)\b`)],
-  ["blocked", rx(String.raw`\b(blocked|stuck|need help|need access|can'?t (?:access|get|see)|no access|escalate)\b`)],
+  ["blocked", rx(String.raw`\b(blocked|need help|need access|no access|locked out|escalate|can'?t (?:log ?in|access|get in|see|connect|ssh)|cannot (?:log ?in|access|connect)|(?:no|don'?t see any|not seeing any) (?:data|metrics|logs|traces))`)],
   ["claim", rx(String.raw`\b(i'?ll take|i will take|i can take|i'?ve got|i got|assign me|i'?ll (?:run|own|handle|look|check|investigate)|i'?m on|i'?m (?:taking|handling|owning))\b`)],
   ["investigating", rx(String.raw`\b(i'?m (?:looking|checking|investigating|digging)|looking (?:at|into)|checking|investigating|digging into)\b`)],
+  ["impact", rx(String.raw`\b(hard down|outage|(?:all|no) (?:pay\w*|checkout\w*|order\w*|traffic|transactions?)|not (?:proces\w*|work\w*|load\w*)|(?:is|are|went|gone) down|\bdown\b|unavailable|customers? (?:can'?t|cannot|are failing)|failing for)`)],
+  ["affirm", rx(String.raw`^(yes|yep|yeah|yup|correct|confirmed|affirmative|ok|okay|ack|roger)\b[.! ]*$`)],
   ["observation", rx(String.raw`\b(seeing|i see|looks like|noticed|error rate|latency|spike|dashboard shows|graph|logs show|cpu|memory)\b`)],
   ["done", rx(String.raw`\b(done|finished|completed|confirmed|verified)\b`)],
   ["comms", rx(String.raw`\b(status ?page|customers?|external comms?|internal comms?|announce|notify)\b`)],

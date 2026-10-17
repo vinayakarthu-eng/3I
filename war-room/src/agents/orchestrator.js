@@ -124,7 +124,12 @@ export class Orchestrator {
     this.state.person(user.name, user.userId);
     this.state.cadence.lastHumanAt = this.state.drillMs();
     // Any message from an owner counts as their report-back: reset their clock.
+    // Any message from an owner is a report-back: it closes their "first report" and resets the clock on the rest.
     for (const t of this.state.openTasks(user.name)) {
+      if (t.text.endsWith("first report")) {
+        t.status = "done";
+        continue;
+      }
       t.dueAt = Math.max(t.dueAt, this.state.inMinutes(5));
       t.chases = 0;
     }

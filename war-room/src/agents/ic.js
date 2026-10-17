@@ -46,10 +46,15 @@ export class IC extends BaseAgent {
 
   /** Every human message gets an in-thread acknowledgement + one question that moves things forward. */
   _onHuman(event, state) {
-    const { intent, function: fn, question } = classify(event.text);
+    const { intent, function: fn } = classify(event.text);
     const who = state.mention(event.name);
     const due = state.t(state.inMinutes(5)).slice(0, 7);
-    const reply = (text, job) => ({ text, job, thread: true });
+    // Never send the same reply twice in a row — if it would repeat, move the conversation on instead.
+    const reply = (text, job) => {
+      if (text === state.lastIcReply) text = `Noted, ${who}. ${this._next(state, event.name)}`;
+      state.lastIcReply = text;
+      return { text, job, thread: true };
+    };
 
     switch (intent) {
       case "who_is_ic":
@@ -69,6 +74,7 @@ export class IC extends BaseAgent {
         state.roles[role] = event.name;
         state.person(event.name).function = role;
         if (role === "comms") state.commsOwner = event.name;
+        else state.facts.investigator ??= event.name;
         state.milestone(`${event.name} owns *${role}*`);
         state.addTask(event.name, `${role}: first report`, 5);
         return reply(
@@ -77,22 +83,45 @@ export class IC extends BaseAgent {
         );
       }
       case "investigating": {
+        state.facts.investigator ??= event.name;
         if (!Object.values(state.roles).includes(event.name)) {
           state.roles[fn && fn !== "comms" ? fn : "ops"] = event.name;
           state.milestone(`${event.name} investigating`);
         }
         state.addTask(event.name, this._taskText(event.text, fn ?? "investigation"), 5);
+        state.asked.set("first_findings", state.drillMs());
         return reply(
-          `Good, ${who}. What are you seeing so far — which service, error rate, since when? Report back by *${due}* even if it's "nothing yet".`,
+          `Good, ${who} — you're on investigation. What are you seeing so far — which service, error rate, since when? Report back by *${due}* even if it's "nothing yet".`,
           "Acknowledge they are investigating, ask what they see so far (service, error rate, start time), and set a report-back time.",
         );
       }
       case "observation":
         return reply(
-          `Noted, ${who}. What's the customer impact — are checkouts/writes failing or just slow? And does it line up with the alert start time?`,
-          "Acknowledge the observation and ask one question that turns it into impact or correlation.",
+          `Noted, ${who}. ${this._next(state, event.name)}`,
+          "Acknowledge the observation and ask the next unanswered question.",
         );
+      case "impact": {
+        const first = !state.facts.impact;
+        state.facts.impact ??= event.text;
+        if (first) state.milestone(`Impact: ${event.text}`);
+        return reply(
+          first
+            ? `Understood, ${who} — impact: *${event.text}*. That's customer-facing: we hold *${state.severity}* and Comms goes external. ${this._next(state, event.name, ["impact"])}`
+            : `Got it, ${who} — impact confirmed. ${this._next(state, event.name, ["impact"])}`,
+          "Record the customer impact (don't ask about impact again) and move to the next step.",
+        );
+      }
+      case "move_on":
+        return this._moveToMitigation(state, event, who);
+      case "drill_note":
+        return reply(
+          `Yes — it's a drill, but we run it like the real thing. ${this._next(state, event.name)}`,
+          "Acknowledge it's a drill, keep the team in role, and give the next step.",
+        );
+      case "affirm":
+        return reply(`Thanks ${who}. ${this._next(state, event.name)}`, "Acknowledge and ask the next unanswered question.");
       case "root_cause":
+        state.facts.theory = event.text;
         if (state.phase === "investigating") state.setPhase("mitigating");
         state.milestone(`Root cause called by ${event.name}`);
         return reply(
@@ -100,6 +129,7 @@ export class IC extends BaseAgent {
           "Move to mitigating and ask for confidence, evidence, the proposed fix and its risk.",
         );
       case "proposal":
+        state.facts.mitigation = event.text;
         state.proposals.push({ by: event.name, text: event.text });
         return reply(
           `Proposal from ${who}: “${event.text}”. *Are there any strong objections?* Deputy — risk check (data loss, blast radius, rollback). I'll call go/no-go after that.`,
@@ -120,9 +150,17 @@ export class IC extends BaseAgent {
           "Call the incident resolved and hand to the Scribe.",
         );
       case "blocked":
+        state.facts.blockers.push(event.text);
+        if (state.facts.blockers.length > 1) {
+          return reply(
+            `${who} still blocked — Liaison is chasing your access. Meanwhile: what does the APM page for ${this._primaryService(state)} show (error rate, failing endpoint)? If you can't see anything at all, tell me and I'll pair you with someone who can.`,
+            "Acknowledge the repeated blocker, confirm the Liaison is on it, and redirect to what they can check now.",
+          );
+        }
+        state.milestone(`Blocker: ${event.name} — ${event.text.slice(0, 60)}`);
         return reply(
-          `${who} what exactly do you need — access, a person, or a decision? Liaison, can you help unblock?`,
-          "Ask precisely what they need to get unblocked and pull in the Liaison.",
+          `${who} understood — you're blocked. Don't wait on host access: work from Datadog (APM service page for ${this._primaryService(state)}, error logs, the database dashboard). Liaison — get ${who} access now. ${this._next(state, event.name, ["impact", "who_investigating"])}`,
+          "Acknowledge the blocker, give a practical workaround (observability instead of host access), task the Liaison with access, then ask the next useful question.",
         );
       case "done": {
         const open = state.openTasks(event.name);
@@ -141,10 +179,86 @@ export class IC extends BaseAgent {
         );
       default:
         return reply(
-          `Ack ${who}. ${question ? "Good question — " : ""}${this._nextQuestion(state, event.name)}`,
+          `Ack ${who}. ${this._next(state, event.name)}`,
           "Acknowledge the message and ask the single most useful next question for the incident.",
         );
     }
+  }
+
+  /** The responder told the IC to stop gathering and act: switch to mitigation with a concrete proposal. */
+  _moveToMitigation(state, event, who) {
+    const decided = state.decisions.find((d) => d.text.startsWith("GO:"));
+    if (decided) {
+      return {
+        thread: true,
+        job: "Confirm mitigation is already underway and ask for its ETA and rollback.",
+        text: `We're already mitigating, ${who} — ${decided.text.replace(/^GO: /, "GO given: ")}. What's the ETA, and what's the rollback if it doesn't help?`,
+      };
+    }
+    if (state.phase === "investigating") state.setPhase("mitigating");
+    const owner = state.facts.investigator ?? event.name;
+    const fix = this._fixFor(state);
+    if (!state.proposals.length) {
+      state.facts.mitigation = fix;
+      state.proposals.push({ by: owner, text: fix });
+    }
+    state.milestone(`IC moved to mitigation (requested by ${event.name})`);
+    return {
+      thread: true,
+      job: "Agree, switch to mitigation now, state what we know, put a concrete mitigation proposal up, and call for objections + the Deputy's risk check.",
+      text:
+        `You're right, ${who} — we have enough. Moving to *mitigating*. ` +
+        `What we know: impact ${state.facts.impact ? `“${state.facts.impact}”` : "is customer-facing"}; ${this._impactLine(state)}. ` +
+        `Proposal: *${fix}* — ${state.mention(owner)} executes. *Are there any strong objections?* Deputy — risk check.`,
+    };
+  }
+
+  _fixFor(state) {
+    switch (state.scenario.domain) {
+      case "db":
+        return "fail over to the in-sync replica and repoint the application";
+      case "security":
+        return "block the attacking ranges at the WAF and force-reset affected sessions";
+      case "k8s":
+        return "roll back the canary to the last good revision";
+      default:
+        return "roll back to the last known-good state";
+    }
+  }
+
+  _primaryService(state) {
+    return state.services.find((s) => s.status === "down")?.name ?? state.services[0]?.name ?? "the failing service";
+  }
+
+  _impactLine(state) {
+    const down = state.services.filter((s) => s.status === "down").map((s) => s.name);
+    return down.length ? `${down.join(", ")} down` : "services degraded";
+  }
+
+  /**
+   * The next most useful question, skipping anything already answered or asked in the last
+   * 5 minutes (`skip` names questions to treat as answered right now).
+   */
+  _next(state, name, skip = []) {
+    const now = state.drillMs();
+    const recently = (k) => now - (state.asked.get(k) ?? -Infinity) < 5 * 60_000;
+    const f = state.facts;
+    const ladder = [
+      ["who_investigating", !f.investigator && state.unownedFunctions().includes("ops"), "*Who's investigating?* Can you take it, and what will you check first?"],
+      ["impact", !f.impact, "What's the customer impact right now — are payments/checkouts failing?"],
+      ["theory", !f.theory && state.phase === "investigating", "What's the leading theory, and what evidence supports it?"],
+      ["mitigation", !f.mitigation, `What's our fastest safe mitigation — e.g. *${this._fixFor(state)}*? Say the word and I'll call go/no-go.`],
+      ["mitigation_eta", state.phase === "mitigating" && !!f.mitigation, "How long until the mitigation is in place, and what's the rollback if it doesn't help?"],
+      ["recovery", state.phase === "monitoring", "Which metric proves recovery, and how long do we watch before calling it?"],
+      ["comms_owner", state.unownedFunctions().includes("comms"), "*Who owns comms?* We need someone on customer updates."],
+      ["blockers", true, "What's blocking you right now, and what do you need from me?"],
+    ];
+    for (const [key, applies, question] of ladder) {
+      if (!applies || skip.includes(key) || recently(key)) continue;
+      state.asked.set(key, now);
+      return question;
+    }
+    return `I'll keep things moving — next status update at *${state.t(state.inMinutes(5)).slice(0, 7)}*. Shout if anything changes.`;
   }
 
   _onSignal(event, state) {
@@ -221,16 +335,6 @@ export class IC extends BaseAgent {
     if (unowned.includes("ops")) return "*Can you take investigation?* Tell me what you'll check first.";
     if (unowned.includes("comms")) return "*Can you own comms?* I need someone on internal/external updates.";
     return "What would you like to pick up — or should I pair you with the investigation owner?";
-  }
-
-  _nextQuestion(state, name) {
-    const unowned = state.unownedFunctions();
-    if (unowned.includes("ops")) return "*Who's investigating?* Can you take it, and what will you check first?";
-    if (!state.openTasks().length) return "What's the next concrete step, and who's doing it?";
-    if (state.phase === "investigating") return "What's the customer impact you're seeing right now?";
-    if (state.phase === "mitigating") return "What's the status of the mitigation, and any blockers?";
-    if (state.phase === "monitoring") return "Are the recovery metrics holding?";
-    return this._ownershipAsk(state, name);
   }
 
   _taskText(text, fallback) {
