@@ -325,3 +325,35 @@ export function describeSignal(plan: SignalPlan): string {
       return `Monitor alert “${p.monitorName ?? "Monitor triggered"}” (${p.priority ?? "P2"}) on ${plan.service}${plan.startOffsetMinutes ? ` at T+${plan.startOffsetMinutes}m` : " at T+0"}.`;
   }
 }
+
+/** The alert a responder would see when this stream starts (posted to Slack by the War Room). */
+export function signalAlertText(plan: SignalPlan): string {
+  const p = plan.params;
+  const pct = plan.ratePerMinute ? Math.round((plan.failuresPerMinute / plan.ratePerMinute) * 1000) / 10 : 0;
+  switch (plan.kind) {
+    case "alert_event":
+      return `Datadog monitor triggered: ${p.monitorName ?? `${plan.service} alert`}`;
+    case "http_errors":
+      return `Datadog APM: ${plan.service} error rate ${pct}% — ${n(plan.failuresPerMinute)}/min HTTP ${p.statusCode ?? 500} on ${p.endpoint ?? "requests"}.`;
+    case "latency_spike":
+      return `Datadog APM: ${plan.service} p95 latency at ~${n(p.latencyMs ?? 2000)} ms on ${p.endpoint ?? "requests"}.`;
+    case "error_logs":
+      return `Log spike: ${n(plan.ratePerMinute)}/min ERROR from ${plan.service} — “${p.errorMessage ?? "error"}”.`;
+    case "db_query_failures":
+      return `Datadog DBM: ${pct}% of queries failing on ${plan.service} (${p.dbName ?? "db"}) — “${p.errorMessage ?? "query failed"}”.`;
+    case "db_connection_exhaustion":
+      return `${plan.service} connection pool saturated (${p.poolSize ?? 100}/${p.poolSize ?? 100}); ${n(plan.failuresPerMinute)}/min requests timing out.`;
+    case "db_slow_queries":
+      return `Datadog DBM: slow queries on ${plan.service} (${p.dbName ?? "db"}) — ~${n(p.latencyMs ?? 1000)} ms.`;
+    case "replica_lag":
+      return `Replication lag on ${plan.service} climbing toward ${p.lagSeconds ?? 10}s.`;
+  }
+}
+
+/** How a stream affects its service's health on the status board. */
+export function signalImpact(plan: SignalPlan): "down" | "degraded" | null {
+  if (plan.kind === "alert_event") return null;
+  if (plan.kind === "db_query_failures" && plan.failuresPerMinute >= plan.ratePerMinute * 0.5) return "down";
+  if (plan.failuresPerMinute >= plan.ratePerMinute * 0.5) return "down";
+  return "degraded";
+}

@@ -149,3 +149,8 @@ export {
   signalMatrixInput,
   type SignalPlanInput,
 } from "./signals";
+export { scheduleDrill, executeDrill, concludeDrill, completeDrill, type ExecutionRecord } from "./lifecycle";
+export { datadogLinks, telemetrySink, type TelemetrySink } from "./datadog";
+export { warRoomConfigured } from "./war-room";
+export { scoringDelayMinutes } from "./drill-writes";
+export { signalRowToPlan } from "./signals";

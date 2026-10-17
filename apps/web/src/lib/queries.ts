@@ -66,3 +66,13 @@ export async function listDrillActions(drillId: string) {
 export async function listReports(orgId: string) {
   return core.listReports(await scoped(orgId));
 }
+
+/** The drill's injection plan (signals described + expected telemetry), empty outside the org. */
+export async function getInjectionPlan(drillId: string) {
+  try {
+    return await core.getInjectionPlan(await currentCtx(), drillId);
+  } catch (err) {
+    if (err instanceof core.ApiError && err.status === 404) return null;
+    throw err;
+  }
+}

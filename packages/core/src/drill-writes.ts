@@ -193,6 +193,12 @@ export async function loadOwnedDrill(ctx: Ctx, id: string) {
   return drill;
 }
 
+/** Minutes between a drill concluding and the scoring agent reviewing it (default 15). */
+export function scoringDelayMinutes() {
+  const v = Number(process.env.SCORING_DELAY_MINUTES ?? 15);
+  return Number.isFinite(v) && v >= 0 ? v : 15;
+}
+
 /** How a status change is recorded on the timeline (integrations like Slack set their own). */
 export interface EventAttribution {
   /** Event actor; defaults to `ctx.userId`. Integrations use ids like "bot" or "slack:U123". */
@@ -228,7 +234,18 @@ export async function changeDrillStatus(
       .update(drills)
       .set({
         status: to,
-        ...(opts.config ? { config: { ...drill.config, ...opts.config } } : {}),
+        ...(opts.config || to === "scoring"
+          ? {
+              config: {
+                ...drill.config,
+                ...opts.config,
+                // The scoring agent reviews responses after a post-drill window (SCORING_DELAY_MINUTES).
+                ...(to === "scoring"
+                  ? { scoring: { ...(drill.config.scoring as object), dueAt: new Date(now.getTime() + scoringDelayMinutes() * 60_000).toISOString() } }
+                  : {}),
+              },
+            }
+          : {}),
         ...(to === "active" && !drill.startedAt ? { startedAt: now } : {}),
         ...(to === "scoring" && !drill.endedAt ? { endedAt: now } : {}),
       })
@@ -256,9 +273,11 @@ export async function changeDrillStatus(
     await dispatchWebhookEvent(ctx.orgId, "drill.started", { drillId: id, name: drill.name });
   }
 
-  // Entering scoring: auto-score and re-evaluate certs/compliance (same as ending a live drill).
+  // Entering scoring: drill.ended now; scoring runs after the post-drill window. With a zero
+  // window (SCORING_DELAY_MINUTES=0) auto-score immediately, as before.
   if (to === "scoring") {
     await dispatchWebhookEvent(ctx.orgId, "drill.ended", { drillId: id, name: drill.name });
+    if (scoringDelayMinutes() > 0) return { id, status: to };
     try {
       const result = await autoScoreDrill(id);
       if (result.finalized) {
