@@ -41,6 +41,7 @@ export type Webhook = Data<typeof core.redactWebhook>;
 export type WebhookDelivery = Jsonify<core.DeliveryRow>;
 export type DeliveryResult = Extract<Data<typeof core.sendTestDelivery>, { ok: true }>["result"];
 export type OrgSettings = core.OrgSettings;
+export type SlackConnection = Data<typeof core.getSlackConnection>;
 export type CreateDrillInput = core.CreateDrillInput;
 export type ScoreInput = core.ScoreInput;
 export type WebhookInput = core.WebhookInput;
@@ -196,6 +197,15 @@ export class DrillForce {
     test: (webhookId: string) => this.request<DeliveryResult>("POST", `/webhooks/${this.id(webhookId)}/test`),
     deliveries: async (opts: { limit?: number } = {}) =>
       (await this.request<{ deliveries: WebhookDelivery[] }>("GET", "/webhooks/deliveries", undefined, opts)).deliveries,
+  };
+
+  readonly integrations = {
+    slack: {
+      /** Connect from the web app (Settings → Integrations → Add to Slack); OAuth needs a browser. */
+      get: () => this.request<SlackConnection>("GET", "/integrations/slack"),
+      disconnect: () =>
+        this.request<{ disconnected: boolean; teamName?: string }>("DELETE", "/integrations/slack"),
+    },
   };
 
   readonly settings = {

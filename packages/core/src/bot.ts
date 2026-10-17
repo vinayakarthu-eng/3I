@@ -43,14 +43,14 @@ export async function actingCtx(drill: Drill, userId?: string | null): Promise<C
   return { orgId: drill.orgId, userId: admin.id };
 }
 
-/** Accepts a full UUID or a unique prefix of at least 6 characters. */
-export async function findDrillByIdPrefix(idOrPrefix: string): Promise<Drill | "ambiguous" | null> {
+/** A drill in `orgId` by full UUID or a unique prefix of at least 6 characters. */
+export async function findDrillByIdPrefix(orgId: string, idOrPrefix: string): Promise<Drill | "ambiguous" | null> {
   const id = idOrPrefix.toLowerCase();
   if (!/^[0-9a-f-]{6,36}$/.test(id)) return null;
   const rows = await db
     .select()
     .from(drills)
-    .where(sql`${drills.id}::text like ${id + "%"}`)
+    .where(and(eq(drills.orgId, orgId), sql`${drills.id}::text like ${id + "%"}`))
     .limit(2);
   if (rows.length > 1) return "ambiguous";
   return rows[0] ?? null;
@@ -146,10 +146,17 @@ export async function logDrillEvent(input: {
   });
 }
 
-export async function findUserByEmail(email: string) {
-  const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+/** The org member with this email, or null (members of other orgs don't match). */
+export async function findUserByEmail(orgId: string, email: string) {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.orgId, orgId), eq(users.email, email.toLowerCase())));
   return user ?? null;
 }
+
+export { findSlackInstallationByOrg, findSlackInstallationByTeam, listSlackInstallations } from "./slack";
+export type { ResolvedInstallation } from "./slack";
 
 export async function markParticipantJoined(drillId: string, userId: string) {
   await db

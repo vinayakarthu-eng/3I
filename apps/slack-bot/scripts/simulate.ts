@@ -11,6 +11,7 @@ process.env.IC_QUIET_MAX_SECONDS ||= "0";
 const { listOrgUsers, system } = await import("@drillforce/core");
 const { handleCommand } = await import("../src/commands");
 const { DrillSessionManager } = await import("../src/drill-session");
+const { channelKey } = await import("../src/workspaces");
 const { logEvent } = await import("../src/events");
 
 const drillId = process.argv[2];
@@ -53,10 +54,14 @@ const fakeClient = {
   },
 } as never;
 
-const sessions = new DrillSessionManager(fakeClient);
+// A pretend workspace connected to the drill's org.
+const workspace = { orgId: target.orgId, teamId: "TSIM", teamName: "Simulated", botUserId: "UBOT", botToken: "xoxb-simulated" };
+const KEY = channelKey(workspace.teamId, "CSIM");
+const sessions = new DrillSessionManager(() => fakeClient);
 const ctx = (channelId: string, userId = "U1") => ({
   client: fakeClient,
   sessions,
+  workspace,
   channelId,
   userId,
   respond: async (text: string) => console.log(`(ephemeral) ${text}`),
@@ -64,7 +69,7 @@ const ctx = (channelId: string, userId = "U1") => ({
 
 console.log("▶ /drillforce start");
 await handleCommand(`start ${drillId}`, ctx("CGENERAL"));
-const session = sessions.get("CSIM");
+const session = sessions.get(KEY);
 if (!session) process.exit(1);
 
 async function say(slackUser: string, text: string) {
@@ -77,12 +82,12 @@ async function say(slackUser: string, text: string) {
     channel: `#${session!.channelName}`,
     payload: { text, ts: nextTs(), user: slackUser, user_name: u.name },
   });
-  sessions.touch("CSIM");
+  sessions.touch(KEY);
 }
 
 await say("U2", "Ack — looking at the alert now, seeing errors across regions.");
 await say("U3", "Declaring an incident. I'll take IC comms.");
-await sessions.reply("CSIM", slackUsers.get("U2")!.name, "Do we know which customers are affected?", "1");
+await sessions.reply(KEY, slackUsers.get("U2")!.name, "Do we know which customers are affected?", "1");
 
 console.log("▶ /drillforce inject");
 await handleCommand("inject Monitoring shows error rates climbing to 40%", ctx("CSIM"));

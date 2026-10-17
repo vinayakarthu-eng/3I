@@ -15,6 +15,9 @@ features:
       # Only used if you switch off socket mode (production):
       url: https://YOUR-HOST/slack/events
 oauth_config:
+  # "Add to Slack" lands here — use your DrillForce URL (Slack requires https outside localhost tunnels).
+  redirect_urls:
+    - https://YOUR-HOST/api/slack/oauth/callback
   scopes:
     bot:
       - commands

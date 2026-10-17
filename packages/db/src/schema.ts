@@ -459,6 +459,29 @@ export const apiKeys = pgTable(
   (t) => [index("api_keys_org_id_idx").on(t.orgId), index("api_keys_hashed_key_idx").on(t.hashedKey)],
 );
 
+// ─── slack_installations ────────────────────────────────────────────────────
+/** One Slack workspace per org, installed via OAuth ("Add to Slack"). */
+export const slackInstallations = pgTable(
+  "slack_installations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .unique()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Slack workspace (team) id, e.g. "T0123ABC". A workspace belongs to one org. */
+    teamId: text("team_id").notNull().unique(),
+    teamName: text("team_name").notNull(),
+    enterpriseId: text("enterprise_id"),
+    botUserId: text("bot_user_id").notNull(),
+    /** AES-256-GCM ciphertext of the xoxb- bot token (see core/secrets.ts). */
+    botTokenEncrypted: text("bot_token_encrypted").notNull(),
+    scopes: text("scopes").notNull().default(""),
+    installedBy: uuid("installed_by").references(() => users.id, { onDelete: "set null" }),
+    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
 // ─── webhooks ───────────────────────────────────────────────────────────────
 export const webhooks = pgTable(
   "webhooks",
@@ -657,5 +680,6 @@ export type DrillComplianceEvidence = typeof drillComplianceEvidence.$inferSelec
 export type Webhook = typeof webhooks.$inferSelect;
 export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type SlackInstallation = typeof slackInstallations.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;

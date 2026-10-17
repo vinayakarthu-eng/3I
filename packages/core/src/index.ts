@@ -133,3 +133,11 @@ export type {
   Organization,
 } from "@drillforce/db";
 export type { AarContent, AarSections } from "@drillforce/report-generator";
+export {
+  slackInstallUrl,
+  completeSlackInstall,
+  getSlackConnection,
+  disconnectSlack,
+  slackInstallMissingConfig,
+  SLACK_BOT_SCOPES,
+} from "./slack";

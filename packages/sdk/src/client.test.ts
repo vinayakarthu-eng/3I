@@ -40,6 +40,7 @@ test("every documented endpoint has an SDK method", async () => {
     df.readiness.member(UUID), df.analytics.get(), df.compliance.list(), df.certifications.list(), df.actions.list(),
     df.webhooks.list(), df.webhooks.create(hook), df.webhooks.update(UUID, hook), df.webhooks.setActive(UUID, false),
     df.webhooks.delete(UUID), df.webhooks.test(UUID), df.webhooks.deliveries(), df.settings.get(), df.settings.update(settings),
+    df.integrations.slack.get(), df.integrations.slack.disconnect(),
   ]);
   const hit = new Set(calls.map((c) => `${c.method} ${c.url.pathname.replace("/api/v1", "").replaceAll(UUID, "{id}")}`));
   const missing = ENDPOINTS.filter((e) => e.tag !== "Meta")

@@ -10,9 +10,10 @@ interface ResolvedUser {
 
 const cache = new Map<string, ResolvedUser>();
 
-/** Maps a Slack user to a DrillForce user via their email address. */
-export async function resolveSlackUser(client: WebClient, slackUserId: string): Promise<ResolvedUser> {
-  const hit = cache.get(slackUserId);
+/** Maps a Slack user to a member of `orgId` via their email address (other orgs never match). */
+export async function resolveSlackUser(client: WebClient, orgId: string, slackUserId: string): Promise<ResolvedUser> {
+  const cacheKey = `${orgId}:${slackUserId}`;
+  const hit = cache.get(cacheKey);
   if (hit) return hit;
 
   let resolved: ResolvedUser = { actor: `slack:${slackUserId}`, name: slackUserId };
@@ -23,13 +24,13 @@ export async function resolveSlackUser(client: WebClient, slackUserId: string): 
     const name = profile?.real_name || profile?.display_name || info.user?.name || slackUserId;
     resolved = { actor: `slack:${slackUserId}`, name, email };
     if (email) {
-      const match = await system.findUserByEmail(email);
+      const match = await system.findUserByEmail(orgId, email);
       if (match) resolved = { actor: match.id, name: match.name, email };
     }
   } catch (err) {
     console.warn(`Could not resolve Slack user ${slackUserId}:`, (err as Error).message);
   }
-  cache.set(slackUserId, resolved);
+  cache.set(cacheKey, resolved);
   return resolved;
 }
 

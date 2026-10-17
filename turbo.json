@@ -7,7 +7,12 @@
     "SLACK_APP_TOKEN",
     "SLACK_SIGNING_SECRET",
     "ANTHROPIC_API_KEY",
-    "ANTHROPIC_MODEL"
+    "ANTHROPIC_MODEL",
+    "SLACK_CLIENT_ID",
+    "SLACK_CLIENT_SECRET",
+    "SLACK_ENCRYPTION_KEY",
+    "SLACK_LEGACY_ORG_ID",
+    "SLACK_API_URL"
   ],
   "tasks": {
     "build": {

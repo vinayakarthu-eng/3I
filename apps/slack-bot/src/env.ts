@@ -19,8 +19,12 @@ function required(name: string): string {
 }
 
 export const env = {
-  slackBotToken: required("SLACK_BOT_TOKEN"),
+  /** App-level token (xapp-, connections:write): one Socket Mode connection for every workspace. */
   slackAppToken: required("SLACK_APP_TOKEN"),
+  /** Legacy single-workspace bot token. Optional — orgs normally connect via Add to Slack. */
+  slackBotToken: process.env.SLACK_BOT_TOKEN && !process.env.SLACK_BOT_TOKEN.endsWith("...") ? process.env.SLACK_BOT_TOKEN : undefined,
+  /** Org the legacy token's workspace belongs to (default: the demo org). */
+  legacyOrgId: process.env.SLACK_LEGACY_ORG_ID || undefined,
   slackSigningSecret: process.env.SLACK_SIGNING_SECRET ?? "",
   /** Optional: without it the IC bot falls back to scripted challenges. */
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || undefined,

@@ -5,6 +5,7 @@ import { discard, runCore } from "@/lib/core-action";
 import {
   createWebhook as create,
   deleteWebhook as remove,
+  disconnectSlack,
   sendTestDelivery,
   setWebhookActive,
   updateWebhook as update,
@@ -42,4 +43,8 @@ export async function testWebhook(id: string): Promise<ActionResult<{ statusCode
     return { ok: false, error: res.data.result.error ?? "Delivery failed" };
   }
   return { ok: true, data: { statusCode: res.data.result.statusCode } };
+}
+
+export async function disconnectSlackAction(): Promise<ActionResult> {
+  return done(await runCore((ctx) => disconnectSlack(ctx)));
 }

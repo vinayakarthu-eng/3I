@@ -19,16 +19,36 @@ Doing it by hand instead:
 | **Socket Mode** | Enabled (no public URL needed for local dev) |
 | **Request URLs** (production only, Socket Mode off) | Events, slash commands, and interactivity all point at `https://<your-host>/slack/events` |
 
-## 2. Collect the tokens
+## 2. Configure DrillForce
 
-| Variable | Where to find it |
-| --- | --- |
-| `SLACK_BOT_TOKEN` (`xoxb-…`) | **OAuth & Permissions** → Install to Workspace → Bot User OAuth Token |
-| `SLACK_APP_TOKEN` (`xapp-…`) | **Basic Information** → App-Level Tokens → Generate, scope `connections:write` |
-| `SLACK_SIGNING_SECRET` | **Basic Information** → App Credentials (used when you leave Socket Mode) |
-| `ANTHROPIC_API_KEY` | console.anthropic.com. Optional: without it the IC uses scripted challenges. |
+Each organization connects **its own** workspace: Settings → Integrations → **Add to Slack**. The
+bot serves every connected workspace from one Socket Mode connection, and a workspace can only
+see and run its own organization's drills.
 
-Add them to the **root** `.env` (see `.env.example`).
+In the Slack app (**api.slack.com/apps**):
+
+1. **Manage Distribution** → activate public distribution (needed to install into more than one
+   workspace).
+2. **OAuth & Permissions → Redirect URLs** → add `https://<your-drillforce-host>/api/slack/oauth/callback`
+   (Slack requires https — use a tunnel such as ngrok for local testing and set
+   `NEXT_PUBLIC_APP_URL` to the tunnel URL).
+
+Then set these in the **root** `.env` (see `.env.example`):
+
+| Variable | Used by | Where to find it |
+| --- | --- | --- |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | web (OAuth) | **Basic Information** → App Credentials |
+| `SLACK_ENCRYPTION_KEY` | web + bot | Any random string of 32+ characters, e.g. `openssl rand -hex 32`. Encrypts stored bot tokens (AES-256-GCM) and signs the OAuth `state`. Keep it stable — changing it orphans connected workspaces. |
+| `SLACK_APP_TOKEN` (`xapp-…`) | bot | **Basic Information** → App-Level Tokens → Generate, scope `connections:write` |
+| `SLACK_SIGNING_SECRET` | bot | **Basic Information** → App Credentials (used when you leave Socket Mode) |
+| `ANTHROPIC_API_KEY` | bot | console.anthropic.com. Optional: without it the IC uses scripted challenges. |
+
+**Legacy single-workspace mode.** An existing `SLACK_BOT_TOKEN` keeps working: its workspace is
+mapped to `SLACK_LEGACY_ORG_ID` (or the demo org). Once that workspace is connected via Add to
+Slack, the env token is ignored and can be removed.
+
+Disconnecting (Settings → Integrations, or `DELETE /api/v1/integrations/slack`) revokes the token at
+Slack; the bot stops responding there and detaches any drill it was running.
 
 ## 3. Run
 
@@ -42,7 +62,7 @@ npm run dev -w @drillforce/slack-bot
 
 | Command | What it does |
 | --- | --- |
-| `/drillforce start <drill-id>` | Drill must be *Scheduled* or *Briefing*. Creates `#drill-<name>-<date>`, invites participants (matched by email), posts the briefing, marks the drill *Active*, starts the IC. A unique ID prefix (6+ chars) works too. |
+| `/drillforce start <drill-id>` | Drill must belong to the workspace's organization and be *Scheduled* or *Briefing*. Creates `#drill-<name>-<date>`, invites participants (matched by email), posts the briefing, marks the drill *Active*, starts the IC. A unique ID prefix (6+ chars) works too. |
 | `/drillforce status` | Elapsed time, status, objectives checklist (inside a drill channel, or pass an ID). |
 | `/drillforce inject <description>` | Posts `⚠️ INJECT: …` as the bot and logs an `inject` event. |
 | `/drillforce end` | Posts a summary, sets the drill to *Scoring* with `ended_at`. |

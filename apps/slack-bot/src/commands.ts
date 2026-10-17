@@ -10,10 +10,13 @@ import type { DrillSessionManager } from "./drill-session";
 import { env } from "./env";
 import { logEvent } from "./events";
 import { resolveSlackUser, slackIdForEmail } from "./users";
+import { channelKey, type Workspace } from "./workspaces";
 
 export interface CommandContext {
   client: WebClient;
   sessions: DrillSessionManager;
+  /** The workspace the command came from — and so the only org whose drills it can touch. */
+  workspace: Workspace;
   channelId: string;
   userId: string;
   /** Sends an ephemeral reply to the person who ran the command. */
@@ -45,8 +48,9 @@ export async function handleCommand(text: string, ctx: CommandContext) {
   }
 }
 
-/** Accepts a full UUID or a unique prefix of at least 6 characters. */
-const findDrill = system.findDrillByIdPrefix;
+/** A drill in the workspace's org, by full UUID or a unique prefix of at least 6 characters. */
+const findDrill = (ctx: CommandContext, idOrPrefix: string) => system.findDrillByIdPrefix(ctx.workspace.orgId, idOrPrefix);
+const sessionKey = (ctx: CommandContext, channelId = ctx.channelId) => channelKey(ctx.workspace.teamId, channelId);
 
 function channelNameFor(drill: Drill) {
   const slug = drill.name
@@ -83,7 +87,7 @@ function formatElapsed(from: Date | null) {
 
 async function startDrill(arg: string, ctx: CommandContext) {
   if (!arg) return ctx.respond("Usage: `/drillforce start <drill-id>` (copy the ID from the drill's URL).");
-  const drill = await findDrill(arg);
+  const drill = await findDrill(ctx, arg);
   if (drill === "ambiguous") return ctx.respond("That ID prefix matches more than one drill. Use more characters.");
   if (!drill) return ctx.respond(`No drill found with ID \`${arg}\`.`);
   if (drill.status !== "scheduled" && drill.status !== "briefing") {
@@ -116,7 +120,7 @@ async function startDrill(arg: string, ctx: CommandContext) {
 
   // Mark the drill active (through core: validated transition, timeline event, drill.started
   // webhook) and remember where it runs. A Scheduled drill passes through Briefing first.
-  const starter = await resolveSlackUser(ctx.client, ctx.userId);
+  const starter = await resolveSlackUser(ctx.client, ctx.workspace.orgId, ctx.userId);
   const acting = await system.actingCtx(drill, starter.actor);
   const attribution = { actor: starter.actor, channel: `#${channel.name}` };
   if (drill.status === "scheduled") {
@@ -128,12 +132,16 @@ async function startDrill(arg: string, ctx: CommandContext) {
   await changeDrillStatus(acting, drill.id, "active", {
     ...attribution,
     text: `Drill started in Slack (#${channel.name}) by ${starter.name}`,
-    config: { slack: { channelId: channel.id, channelName: channel.name } },
+    config: { slack: { teamId: ctx.workspace.teamId, channelId: channel.id, channelName: channel.name } },
   });
   const updated = (await system.getDrillById(drill.id))!;
 
-  await ctx.sessions.attach(updated, { channelId: channel.id, channelName: channel.name });
-  const injectCount = ctx.sessions.get(channel.id)?.pendingInjects.length ?? 0;
+  await ctx.sessions.attach(updated, ctx.workspace, {
+    teamId: ctx.workspace.teamId,
+    channelId: channel.id,
+    channelName: channel.name,
+  });
+  const injectCount = ctx.sessions.get(sessionKey(ctx, channel.id))?.pendingInjects.length ?? 0;
 
   const briefing = [
     `:rotating_light: *${drill.name}* — ${DRILL_TYPE_LABELS[drill.type]} exercise`,
@@ -175,12 +183,12 @@ async function startDrill(arg: string, ctx: CommandContext) {
 // ─── status ─────────────────────────────────────────────────────────────────
 
 async function drillStatus(arg: string, ctx: CommandContext) {
-  const session = ctx.sessions.get(ctx.channelId);
+  const session = ctx.sessions.get(sessionKey(ctx));
   let drill: Drill | null = null;
   if (session) {
     drill = await system.getDrillById(session.drillId);
   } else if (arg) {
-    const found = await findDrill(arg);
+    const found = await findDrill(ctx, arg);
     drill = found === "ambiguous" ? null : found;
   }
   if (!drill) {
@@ -204,28 +212,28 @@ async function drillStatus(arg: string, ctx: CommandContext) {
 // ─── inject ─────────────────────────────────────────────────────────────────
 
 async function postInject(arg: string, ctx: CommandContext) {
-  const session = ctx.sessions.get(ctx.channelId);
+  const session = ctx.sessions.get(sessionKey(ctx));
   if (!session) return ctx.respond("Run `/drillforce inject` inside an active drill channel.");
   if (!arg) return ctx.respond("Usage: `/drillforce inject <description>`");
-  await ctx.sessions.post(ctx.channelId, arg, { asInject: true });
+  await ctx.sessions.post(sessionKey(ctx), arg, { asInject: true });
   return ctx.respond("Inject posted.");
 }
 
 // ─── end ────────────────────────────────────────────────────────────────────
 
 async function endDrill(ctx: CommandContext) {
-  const session = ctx.sessions.get(ctx.channelId);
+  const session = ctx.sessions.get(sessionKey(ctx));
   if (!session) return ctx.respond("Run `/drillforce end` inside an active drill channel.");
 
   const drill = await system.getDrillById(session.drillId);
   if (!drill || drill.status !== "active") {
-    ctx.sessions.detach(ctx.channelId);
+    ctx.sessions.detach(sessionKey(ctx));
     return ctx.respond("This drill is no longer active.");
   }
 
   // Through core: timeline event, drill.ended webhook, then auto-scoring (+ drill.scored).
-  const ender = await resolveSlackUser(ctx.client, ctx.userId);
-  ctx.sessions.detach(ctx.channelId);
+  const ender = await resolveSlackUser(ctx.client, ctx.workspace.orgId, ctx.userId);
+  ctx.sessions.detach(sessionKey(ctx));
   await changeDrillStatus(await system.actingCtx(drill, ender.actor), drill.id, "scoring", {
     actor: ender.actor,
     channel: `#${session.channelName}`,

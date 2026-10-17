@@ -389,6 +389,33 @@ report generator.
 - **Still open:** real auth (Clerk) in place of `resolveDefaultActor`; per-org Slack install
   (the bot is still one workspace for all orgs); optional standalone `apps/api`.
 
+### Per-org Slack install (done)
+
+Each org now connects its own Slack workspace; one bot process serves them all.
+
+- **`slack_installations`** (migration `0011`): one workspace per org and one org per workspace;
+  the bot token is stored AES-256-GCM encrypted (`core/secrets.ts`, key from
+  `SLACK_ENCRYPTION_KEY`).
+- **Add to Slack** (Settings → Integrations): `GET /api/slack/install` → slack.com with a signed,
+  10-minute `state` carrying the org → `GET /api/slack/oauth/callback` exchanges the code and stores
+  the install. Handles cancel, Slack errors, tampered/expired state, and a workspace already owned
+  by another org (refused). Reinstall replaces the org's workspace; the card warns about missing
+  scopes and offers Reconnect / Disconnect (revokes the token at Slack).
+- **API:** `GET|DELETE /api/v1/integrations/slack` (+ SDK `integrations.slack`).
+- **Bot:** no global bot token. Bolt `authorize` resolves each event's workspace → org + token
+  (`workspaces.ts`, 60s cache); sessions are keyed by workspace+channel with a per-workspace
+  client; `/drillforce` only finds drills in the workspace's org (previously any org's drill could
+  be started by ID prefix); Slack users map only to members of that org; restore skips drills
+  whose workspace was disconnected; a revoked token detaches the session. Legacy
+  `SLACK_BOT_TOKEN` still works (mapped to `SLACK_LEGACY_ORG_ID` / the demo org) until the
+  workspace is installed properly.
+- **Fixed (pre-existing):** the bot couldn't start in Socket Mode — `undici` (a peer dependency of
+  `@slack/socket-mode`, skipped by `legacy-peer-deps`) was never installed. Added (7.30.0).
+- **Verified:** core secrets tests 5/5; OAuth end-to-end against a mock Slack API (21 checks);
+  two-org bot isolation (16 checks: commands, user mapping, tokens, restore, revoke); legacy
+  fallback (5); simulator; bot boots to the Slack handshake. `typecheck` 8/8, tests 7+5+5+4, lint,
+  `next build`. Not tested against a real Slack workspace.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

@@ -88,6 +88,8 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "POST", path: "/webhooks/{webhookId}/test", tag: "Webhooks", summary: "Send a test.ping delivery", operationId: "testWebhook" },
   { method: "GET", path: "/webhooks/deliveries", tag: "Webhooks", summary: "Recent deliveries", operationId: "listWebhookDeliveries", query: [limit], returns: "deliveries" },
 
+  { method: "GET", path: "/integrations/slack", tag: "Settings", summary: "This org's Slack workspace connection (install via the web app)", operationId: "getSlackConnection" },
+  { method: "DELETE", path: "/integrations/slack", tag: "Settings", summary: "Disconnect Slack (revokes the bot token)", operationId: "disconnectSlack" },
   { method: "GET", path: "/settings", tag: "Settings", summary: "Org settings (defaults filled in)", operationId: "getSettings" },
   { method: "PUT", path: "/settings", tag: "Settings", summary: "Replace org settings", operationId: "updateSettings", body: orgSettingsInput },
 ];
@@ -105,7 +107,7 @@ const errorEnvelope = {
       type: "object",
       required: ["code", "message"],
       properties: {
-        code: { type: "string", enum: ["bad_request", "unauthorized", "not_found", "internal"] },
+        code: { type: "string", enum: ["bad_request", "unauthorized", "not_found", "not_configured", "internal"] },
         message: { type: "string" },
         fieldErrors: { type: "object", additionalProperties: { type: "string" } },
       },

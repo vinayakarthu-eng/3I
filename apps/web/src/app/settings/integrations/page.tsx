@@ -1,16 +1,20 @@
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { PageHeader } from "@/components/layout/page-header";
+import { SlackConnection, type SlackConnectionView } from "@/components/integrations/slack-connection";
 import { WebhooksManager } from "@/components/integrations/webhooks-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { currentCtx } from "@/lib/core-action";
 import { getCurrentUser } from "@/lib/current-user";
 import { listRecentDeliveries, listWebhooks } from "@/lib/webhooks";
 import { cn } from "@/lib/utils";
+import { getSlackConnection, slackInstallMissingConfig } from "@drillforce/core";
 import {
   Activity,
   AlertCircle,
   BellRing,
+  CheckCircle2,
   Database,
   GitBranch,
   LineChart,
@@ -29,26 +33,27 @@ interface IntegrationCard {
   description: string;
   icon: LucideIcon;
   status: "connected" | "not_connected" | "coming_soon";
-  detail?: string;
 }
 
-export default async function IntegrationsPage() {
-  const { org } = await getCurrentUser();
-  const slackConnected = Boolean(process.env.SLACK_BOT_TOKEN);
-  const slackWorkspace = process.env.SLACK_WORKSPACE ?? null;
+type Props = { searchParams: { slack?: string; team?: string; slack_error?: string } };
 
-  const [webhooks, deliveries] = await Promise.all([
+export default async function IntegrationsPage({ searchParams }: Props) {
+  const { org } = await getCurrentUser();
+  const [webhooks, deliveries, connection] = await Promise.all([
     listWebhooks(org.id),
     listRecentDeliveries(org.id),
+    getSlackConnection(await currentCtx()),
   ]);
+  const slack: SlackConnectionView = connection.connected
+    ? connection
+    : { connected: false, installReady: connection.installReady, missingConfig: slackInstallMissingConfig() };
 
   const integrations: IntegrationCard[] = [
     {
       name: "Slack",
       description: "Run the Incident Commander bot and relay drill comms into Slack.",
       icon: MessageSquare,
-      status: slackConnected ? "connected" : "not_connected",
-      detail: slackConnected ? (slackWorkspace ?? "Bot token configured") : undefined,
+      status: slack.connected ? "connected" : "not_connected",
     },
     { name: "Microsoft Teams", description: "Bring drills into Teams channels.", icon: MessageSquare, status: "coming_soon" },
     { name: "PagerDuty", description: "Import on-call schedules and trigger test pages during drills.", icon: BellRing, status: "not_connected" },
@@ -75,6 +80,20 @@ export default async function IntegrationsPage() {
         }
       />
 
+      {searchParams.slack === "connected" && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          Slack connected{searchParams.team ? ` to ${searchParams.team}` : ""}. Run{" "}
+          <code className="font-mono">/drillforce start &lt;drill-id&gt;</code> in any channel.
+        </div>
+      )}
+      {searchParams.slack_error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {searchParams.slack_error}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {integrations.map((it) => (
           <Card key={it.name} className="flex flex-col">
@@ -90,18 +109,7 @@ export default async function IntegrationsPage() {
             </CardHeader>
             <CardContent className="mt-auto">
               {it.name === "Slack" ? (
-                <div className="space-y-2">
-                  {it.detail && <p className="text-xs text-muted-foreground">{it.detail}</p>}
-                  <Button asChild variant="outline" size="sm" className="w-full">
-                    <a
-                      href="https://github.com/your-org/drillforce/tree/main/apps/slack-bot#readme"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {it.status === "connected" ? "Manage" : "Set up Slack bot"}
-                    </a>
-                  </Button>
-                </div>
+                <SlackConnection slack={slack} />
               ) : (
                 <Button variant="outline" size="sm" className="w-full" disabled>
                   {it.status === "coming_soon" ? "Coming soon" : "Configure"}
