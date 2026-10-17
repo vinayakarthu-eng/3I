@@ -18,6 +18,7 @@ import {
   DRILL_STATUS_LABELS,
   DRILL_TYPES,
   PARTICIPANT_ROLES,
+  SECTORS,
   canTransition,
   type DrillStatus,
 } from "@drillforce/shared";
@@ -30,7 +31,7 @@ import { dispatchWebhookEvent } from "./webhooks";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-function nameFromEmail(email: string) {
+export function nameFromEmail(email: string) {
   return email
     .split("@")[0]
     .split(/[._-]+/)
@@ -40,14 +41,14 @@ function nameFromEmail(email: string) {
 }
 
 // ─── create ─────────────────────────────────────────────────────────────────
-const objectiveInput = z.object({
+export const objectiveInput = z.object({
   description: z.string().trim().min(1).max(1000),
   criteriaType: z.enum(CRITERIA_TYPES),
   targetValue: z.record(z.unknown()).default({}),
   weight: z.coerce.number().int().min(1).max(5).default(1),
   competencyAreaId: z.string().uuid().nullish(),
 });
-const participantInput = z.object({
+export const participantInput = z.object({
   email: z.string().trim().toLowerCase().email(),
   name: z.string().trim().optional(),
   role: z.enum(PARTICIPANT_ROLES).default("responder"),
@@ -59,6 +60,7 @@ export const createDrillInput = z.object({
   scheduledAt: z.string().datetime().optional(),
   scenario: z.record(z.unknown()).optional(),
   templateId: z.string().optional(),
+  sector: z.enum(SECTORS).optional(),
   status: z.enum(["draft", "scheduled"]).default("draft"),
   objectives: z.array(objectiveInput).optional(),
   participants: z.array(participantInput).default([]),
@@ -106,7 +108,7 @@ export async function createDrill(ctx: Ctx, raw: unknown): Promise<{ id: string 
         status: input.status,
         description: input.description ?? null,
         scenario: (input.scenario ?? template?.scenario ?? null) as typeof drills.$inferInsert.scenario,
-        config: { templateId: input.templateId ?? null, sector: template?.sector },
+        config: { templateId: input.templateId ?? null, sector: input.sector ?? template?.sector },
         scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
         createdBy: ctx.userId,
       })
@@ -145,9 +147,9 @@ export async function createDrill(ctx: Ctx, raw: unknown): Promise<{ id: string 
   return { id };
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-async function resolveParticipants(
+export async function resolveParticipants(
   tx: Tx,
   orgId: string,
   participants: { email: string; name?: string }[],
@@ -177,7 +179,7 @@ async function resolveParticipants(
 }
 
 // ─── status transitions ───────────────────────────────────────────────────────
-async function loadOwnedDrill(ctx: Ctx, id: string) {
+export async function loadOwnedDrill(ctx: Ctx, id: string) {
   if (!UUID.test(id)) throw notFound("Drill");
   const [drill] = await db
     .select()
@@ -187,7 +189,27 @@ async function loadOwnedDrill(ctx: Ctx, id: string) {
   return drill;
 }
 
-export async function changeDrillStatus(ctx: Ctx, id: string, to: DrillStatus) {
+/** How a status change is recorded on the timeline (integrations like Slack set their own). */
+export interface EventAttribution {
+  /** Event actor; defaults to `ctx.userId`. Integrations use ids like "bot" or "slack:U123". */
+  actor?: string;
+  channel?: string;
+  /** Timeline text; defaults to a description of the change. */
+  text?: string;
+  occurredAt?: Date;
+}
+
+const DEFAULT_STATUS_TEXT: Partial<Record<`${DrillStatus}>${DrillStatus}`, string>> = {
+  "briefing>active": "Drill started",
+  "active>scoring": "Drill ended",
+};
+
+export async function changeDrillStatus(
+  ctx: Ctx,
+  id: string,
+  to: DrillStatus,
+  opts: EventAttribution & { config?: Record<string, unknown> } = {},
+) {
   const drill = await loadOwnedDrill(ctx, id);
   if (!canTransition(drill.status, to)) {
     throw badRequest(`Can't move from ${DRILL_STATUS_LABELS[drill.status]} to ${DRILL_STATUS_LABELS[to]}.`);
@@ -196,12 +218,13 @@ export async function changeDrillStatus(ctx: Ctx, id: string, to: DrillStatus) {
     throw badRequest("Set a scheduled date before scheduling this drill.");
   }
 
-  const now = new Date();
+  const now = opts.occurredAt ?? new Date();
   await db.transaction(async (tx) => {
     await tx
       .update(drills)
       .set({
         status: to,
+        ...(opts.config ? { config: { ...drill.config, ...opts.config } } : {}),
         ...(to === "active" && !drill.startedAt ? { startedAt: now } : {}),
         ...(to === "scoring" && !drill.endedAt ? { endedAt: now } : {}),
       })
@@ -209,12 +232,16 @@ export async function changeDrillStatus(ctx: Ctx, id: string, to: DrillStatus) {
     await tx.insert(drillEvents).values({
       drillId: id,
       eventType: "system",
-      actor: ctx.userId,
+      actor: opts.actor ?? ctx.userId,
+      channel: opts.channel ?? null,
       payload: {
         kind: "status_change",
         from: drill.status,
         to,
-        text: `Status changed from ${DRILL_STATUS_LABELS[drill.status]} to ${DRILL_STATUS_LABELS[to]}`,
+        text:
+          opts.text ??
+          DEFAULT_STATUS_TEXT[`${drill.status}>${to}`] ??
+          `Status changed from ${DRILL_STATUS_LABELS[drill.status]} to ${DRILL_STATUS_LABELS[to]}`,
       },
       occurredAt: now,
     });
@@ -244,7 +271,12 @@ export async function changeDrillStatus(ctx: Ctx, id: string, to: DrillStatus) {
 }
 
 // ─── fire inject ──────────────────────────────────────────────────────────────
-export async function fireInject(ctx: Ctx, drillId: string, injectId: string) {
+export async function fireInject(
+  ctx: Ctx,
+  drillId: string,
+  injectId: string,
+  opts: Omit<EventAttribution, "text"> & { payload?: Record<string, unknown> } = {},
+) {
   await loadOwnedDrill(ctx, drillId);
   if (!UUID.test(injectId)) throw notFound("Inject");
   const [inject] = await db
@@ -254,18 +286,32 @@ export async function fireInject(ctx: Ctx, drillId: string, injectId: string) {
   if (!inject) throw notFound("Inject");
   if (inject.fired) return { id: injectId, fired: true };
 
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx.update(drillInjects).set({ fired: true, firedAt: now }).where(eq(drillInjects.id, injectId));
+  const now = opts.occurredAt ?? new Date();
+  const claimed = await db.transaction(async (tx) => {
+    // Conditional update: only one concurrent caller gets to fire it.
+    const [row] = await tx
+      .update(drillInjects)
+      .set({ fired: true, firedAt: now })
+      .where(and(eq(drillInjects.id, injectId), eq(drillInjects.fired, false)))
+      .returning({ id: drillInjects.id });
+    if (!row) return false;
     await tx.insert(drillEvents).values({
       drillId,
       eventType: "inject",
-      actor: ctx.userId,
-      channel: "api",
-      payload: { text: inject.description, injectType: inject.injectType, triggerAtMinutes: inject.triggerAtMinutes },
+      actor: opts.actor ?? ctx.userId,
+      channel: opts.channel ?? "api",
+      payload: {
+        ...opts.payload,
+        text: inject.description,
+        injectId,
+        injectType: inject.injectType,
+        triggerAtMinutes: inject.triggerAtMinutes,
+      },
       occurredAt: now,
     });
+    return true;
   });
+  if (!claimed) return { id: injectId, fired: true };
   await dispatchWebhookEvent(ctx.orgId, "inject.fired", {
     drillId,
     injectId,
@@ -293,7 +339,7 @@ export async function submitScores(ctx: Ctx, drillId: string, raw: unknown) {
     throw badRequest("Scores can only be submitted while the drill is in Scoring or Debriefing.");
   }
   const parsed = scoreInput.safeParse(raw);
-  if (!parsed.success) throw badRequest("Invalid scores payload.", flatten(parsed.error));
+  if (!parsed.success) throw badRequest(parsed.error.issues[0].message, flatten(parsed.error));
 
   let result: Awaited<ReturnType<typeof recordManualScores>>;
   try {

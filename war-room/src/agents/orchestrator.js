@@ -11,8 +11,9 @@ const MAX_SPEAKS = 6; // per root event, prevents storms
  * min-speak throttles, and bounded cross-agent observation (loop prevention).
  */
 export class Orchestrator {
-  constructor({ state, agents, send, speed }) {
+  constructor({ state, agents, send, speed, onClose }) {
     this.state = state;
+    this.onClose = onClose;
     this.agents = agents;
     this.send = send; // (message, exceptAdapter?) => Promise
     this.speed = Math.max(1, speed || 1);
@@ -45,7 +46,15 @@ export class Orchestrator {
   }
 
   async emitUser(user, exceptAdapter) {
-    const message = { role: null, name: user.name, emoji: "🧑", color: "#e2e8f0", text: user.text, kind: "user" };
+    const message = {
+      role: null,
+      name: user.name,
+      emoji: "🧑",
+      color: "#e2e8f0",
+      text: user.text,
+      kind: "user",
+      meta: { userId: user.userId },
+    };
     this.state.record(message);
     await this.send(message, exceptAdapter);
   }
@@ -92,6 +101,7 @@ export class Orchestrator {
     if (out) await this.speak("scribe", out.text);
     this.state.closed = true;
     this.state.setPhase("closed");
+    await this.onClose?.();
   }
 
   // ─── routing ─────────────────────────────────────────────────────────────────

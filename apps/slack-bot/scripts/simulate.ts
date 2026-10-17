@@ -8,7 +8,7 @@ process.env.SLACK_APP_TOKEN ||= "xapp-simulated";
 process.env.IC_QUIET_MIN_SECONDS ||= "0";
 process.env.IC_QUIET_MAX_SECONDS ||= "0";
 
-const { db, drills, eq, users } = await import("@drillforce/db");
+const { listOrgUsers, system } = await import("@drillforce/core");
 const { handleCommand } = await import("../src/commands");
 const { DrillSessionManager } = await import("../src/drill-session");
 const { logEvent } = await import("../src/events");
@@ -19,7 +19,12 @@ if (!drillId) {
   process.exit(1);
 }
 
-const orgUsers = await db.select().from(users);
+const target = await system.getDrillById(drillId);
+if (!target) {
+  console.error(`No drill ${drillId}`);
+  process.exit(1);
+}
+const orgUsers = await listOrgUsers(await system.actingCtx(target));
 const slackUsers = new Map(orgUsers.map((u, i) => [`U${i + 1}`, u]));
 let ts = Date.now() / 1000;
 const nextTs = () => (ts += 1).toFixed(6);
@@ -92,6 +97,6 @@ await handleCommand("status", ctx("CSIM"));
 console.log("▶ /drillforce end");
 await handleCommand("end", ctx("CSIM"));
 
-const [final] = await db.select().from(drills).where(eq(drills.id, drillId));
+const final = (await system.getDrillById(drillId))!;
 console.log(`\n✅ Drill is now "${final.status}" (started ${final.startedAt?.toISOString()}, ended ${final.endedAt?.toISOString()})`);
 process.exit(0);

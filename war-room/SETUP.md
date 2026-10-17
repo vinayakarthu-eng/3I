@@ -86,3 +86,17 @@ curl -X POST http://localhost:3000/api/alert \
   `canary_leak`; speed `1`/`2`/`4`.
 - `/sitrep` — situation report.
 - `/drill-stop` — end the drill and post the after-action.
+
+## Record drills in DrillForce (optional)
+
+Set `DRILLFORCE_API_URL` (where the DrillForce web app runs, e.g. `http://localhost:3000`) and
+`DRILLFORCE_API_KEY` (Settings → API keys) in `.env`, and give the War Room its own `PORT` (e.g.
+`3100`) if both run locally. Each incident then becomes a DrillForce drill:
+
+- incident start → drill created from the matching scenario template and moved to **Active**
+- every agent, human and inject message → a timeline event (agents as `agent:<role>`, Slack
+  users as `slack:<id>`, injects as signals)
+- incident close → drill moved to **Scoring**: auto-scored, `drill.ended` / `drill.scored`
+  webhooks fire, and the AAR can be generated
+
+The adapter only uses the public API and is fail-soft: if DrillForce is down the drill carries on.

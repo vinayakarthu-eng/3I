@@ -46,3 +46,19 @@ test("OpenAPI request bodies are real schemas", () => {
   const props = create.requestBody.content["application/json"].schema.properties ?? {};
   assert.ok("name" in props && "templateId" in props, "createDrill body schema missing fields");
 });
+
+test("the web app reaches data only through @drillforce/core", () => {
+  const SRC = join(__dirname, "../../../..");
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.(ts|tsx)$/.test(name) && /from ["']@drillforce\/(db|scoring-engine|report-generator)["']/.test(readFileSync(full, "utf8"))) {
+        offenders.push(relative(SRC, full));
+      }
+    }
+  };
+  walk(SRC);
+  assert.deepEqual(offenders, [], "import these through @drillforce/core instead");
+});

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { DrillObjective, Drill } from "@drillforce/db";
+import type { DrillObjective, Drill } from "@drillforce/core";
 import { CRITERIA_TYPE_LABELS } from "@drillforce/shared";
 import { env } from "./env";
 

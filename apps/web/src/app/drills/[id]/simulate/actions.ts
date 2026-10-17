@@ -1,23 +1,10 @@
 "use server";
 
 import type { ActionResult } from "@/app/drills/actions";
+import { discard, runCore } from "@/lib/core-action";
 import { getCurrentUser } from "@/lib/current-user";
-import { dispatchWebhookEvent } from "@/lib/webhooks";
-import { and, db, drillEvents, drillInjects, drills, eq } from "@drillforce/db";
+import { fireInject as fire, recordDrillEvent } from "@drillforce/core";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
-
-async function loadDrill(drillId: string) {
-  const { user, org } = await getCurrentUser();
-  if (!z.string().uuid().safeParse(drillId).success) return null;
-  const [drill] = await db
-    .select()
-    .from(drills)
-    .where(and(eq(drills.id, drillId), eq(drills.orgId, org.id)));
-  return drill ? { drill, user, org } : null;
-}
-
-const messageSchema = z.string().trim().min(1, "Message can't be empty").max(2000);
 
 export interface ChatMessage {
   id: string;
@@ -29,82 +16,32 @@ export interface ChatMessage {
 }
 
 /** Post a participant chat message into the drill channel (stored as a drill_event). */
-export async function postChatMessage(
-  drillId: string,
-  text: string,
-): Promise<ActionResult<ChatMessage>> {
-  const parsed = messageSchema.safeParse(text);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-  const ctx = await loadDrill(drillId);
-  if (!ctx) return { ok: false, error: "Drill not found." };
-  const { user } = ctx;
-
-  const now = new Date();
-  const [row] = await db
-    .insert(drillEvents)
-    .values({
-      drillId,
-      eventType: "message",
-      actor: user.id,
-      channel: "war-room",
-      payload: { text: parsed.data },
-      occurredAt: now,
-    })
-    .returning({ id: drillEvents.id });
+export async function postChatMessage(drillId: string, text: string): Promise<ActionResult<ChatMessage>> {
+  const result = await runCore((ctx) => recordDrillEvent(ctx, drillId, { type: "message", text, channel: "war-room" }));
+  if (!result.ok) return result.fieldErrors?.text ? { ok: false, error: "Message can't be empty" } : result;
 
   revalidatePath(`/drills/${drillId}/simulate`);
+  const { user } = await getCurrentUser();
+  const row = result.data;
   return {
     ok: true,
     data: {
       id: row.id,
-      actor: user.id,
+      actor: row.actor,
       actorName: user.name,
-      text: parsed.data,
+      text: String(row.payload.text ?? ""),
       kind: "message",
-      occurredAt: now.toISOString(),
+      occurredAt: row.occurredAt.toISOString(),
     },
   };
 }
 
 /** Mark an inject as fired and record a drill_event + inject chat notification. */
 export async function fireInject(drillId: string, injectId: string): Promise<ActionResult> {
-  const ctx = await loadDrill(drillId);
-  if (!ctx) return { ok: false, error: "Drill not found." };
-  const { user } = ctx;
-
-  const [inject] = await db
-    .select()
-    .from(drillInjects)
-    .where(and(eq(drillInjects.id, injectId), eq(drillInjects.drillId, drillId)));
-  if (!inject) return { ok: false, error: "Inject not found." };
-  if (inject.fired) return { ok: true, data: null };
-
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(drillInjects)
-      .set({ fired: true, firedAt: now })
-      .where(eq(drillInjects.id, injectId));
-    await tx.insert(drillEvents).values({
-      drillId,
-      eventType: "inject",
-      actor: user.id,
-      channel: "war-room",
-      payload: {
-        text: inject.description,
-        injectType: inject.injectType,
-        triggerAtMinutes: inject.triggerAtMinutes,
-      },
-      occurredAt: now,
-    });
-  });
-
-  await dispatchWebhookEvent(ctx.org.id, "inject.fired", {
-    drillId,
-    injectId,
-    description: inject.description,
-  });
-  revalidatePath(`/drills/${drillId}/simulate`);
-  revalidatePath(`/drills/${drillId}`);
-  return { ok: true, data: null };
+  const result = await runCore((ctx) => fire(ctx, drillId, injectId, { channel: "war-room" }));
+  if (result.ok) {
+    revalidatePath(`/drills/${drillId}/simulate`);
+    revalidatePath(`/drills/${drillId}`);
+  }
+  return discard(result);
 }

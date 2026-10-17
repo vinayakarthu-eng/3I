@@ -8,7 +8,7 @@ import { useAction } from "@/hooks/use-action";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate, formatDateTime, formatScore, scoreColor } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AarContent } from "@drillforce/report-generator";
+import type { AarContent } from "@drillforce/core";
 import { ACTION_STATUSES, type ActionSeverity, type ActionStatus } from "@drillforce/shared";
 import {
   BadgeCheck,

@@ -1,6 +1,6 @@
 import { env } from "./env";
 import { App, LogLevel } from "@slack/bolt";
-import { and, db, drillParticipants, eq, isNull } from "@drillforce/db";
+import { ApiError, system } from "@drillforce/core";
 import { handleCommand } from "./commands";
 import { DrillSessionManager } from "./drill-session";
 import { logEvent, slackTsToDate } from "./events";
@@ -29,6 +29,10 @@ app.command("/drillforce", async ({ command, ack, respond, client }) => {
       respond: (text) => respond({ response_type: "ephemeral", text }),
     });
   } catch (err) {
+    if (err instanceof ApiError) {
+      await respond({ response_type: "ephemeral", text: err.message });
+      return;
+    }
     console.error("Command failed:", err);
     const code = (err as { data?: { error?: string } }).data?.error;
     await respond({
@@ -108,16 +112,7 @@ app.event("member_joined_channel", async ({ event, client }) => {
   if (!session || event.user === botUserId) return;
   const user = await resolveSlackUser(client, event.user);
   if (!user.actor.startsWith("slack:")) {
-    await db
-      .update(drillParticipants)
-      .set({ joinedAt: new Date() })
-      .where(
-        and(
-          eq(drillParticipants.drillId, session.drillId),
-          eq(drillParticipants.userId, user.actor),
-          isNull(drillParticipants.joinedAt),
-        ),
-      );
+    await system.markParticipantJoined(session.drillId, user.actor);
   }
 });
 

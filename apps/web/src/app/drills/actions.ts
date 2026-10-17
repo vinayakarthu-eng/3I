@@ -1,86 +1,50 @@
 "use server";
 
-import { getCurrentUser } from "@/lib/current-user";
-import { drillInputSchema, issuesToErrors, type DrillInput } from "@/lib/drill-form";
-import {
-  and,
-  db,
-  drillEvents,
-  drillObjectives,
-  drillParticipants,
-  drills,
-  eq,
-  inArray,
-  users,
-  type Database,
-} from "@drillforce/db";
-import type { DrillStatus } from "@drillforce/shared";
+import { runCore } from "@/lib/core-action";
+import { drillInputSchema, issuesToErrors, type DrillInput, type ParsedDrillInput } from "@/lib/drill-form";
+import { createDrill as create, updateDrill as update } from "@drillforce/core";
 import { revalidatePath } from "next/cache";
 
 export type ActionResult<T = null> =
   | { ok: true; data: T }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
-type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+const SAVE_FAILED = "Something went wrong while saving the drill.";
 
-/** Find-or-create org users for each participant email. */
-async function resolveParticipantUsers(
-  tx: Tx,
-  orgId: string,
-  participants: { email: string; name?: string }[],
-) {
-  const emails = participants.map((p) => p.email);
-  const existing = emails.length
-    ? await tx.select().from(users).where(inArray(users.email, emails))
-    : [];
-
-  const foreign = existing.find((u) => u.orgId !== orgId);
-  if (foreign) {
-    throw new UserFacingError(`${foreign.email} belongs to a different organization.`);
-  }
-
-  const byEmail = new Map(existing.map((u) => [u.email, u]));
-  const toCreate = participants.filter((p) => !byEmail.has(p.email));
-  if (toCreate.length) {
-    const created = await tx
-      .insert(users)
-      .values(
-        toCreate.map((p) => ({
-          orgId,
-          email: p.email,
-          name: p.name?.trim() || nameFromEmail(p.email),
-          role: "participant" as const,
-        })),
-      )
-      .returning();
-    for (const u of created) byEmail.set(u.email, u);
-  }
-  return byEmail;
+/** Wizard values → the core drill payload (shared by create and update). */
+function toCore(values: ParsedDrillInput) {
+  return {
+    name: values.name,
+    type: values.type,
+    sector: values.sector,
+    description: values.description || undefined,
+    scheduledAt: values.scheduledAt ? new Date(values.scheduledAt).toISOString() : undefined,
+    scenario: values.scenario ?? undefined,
+    objectives: values.objectives.map((o) => ({
+      id: o.id,
+      description: o.description,
+      criteriaType: o.criteriaType,
+      targetValue: o.targetValue,
+      weight: o.weight,
+      competencyAreaId: o.competencyAreaId,
+    })),
+    participants: values.participants.map((p) => ({ email: p.email, name: p.name || undefined, role: p.role })),
+  };
 }
 
-function nameFromEmail(email: string) {
-  return email
-    .split("@")[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((p) => p[0].toUpperCase() + p.slice(1))
-    .join(" ");
-}
-
-class UserFacingError extends Error {}
-
-function statusForIntent(intent: "draft" | "schedule" | "save", current?: DrillStatus): DrillStatus {
-  if (intent === "draft") return "draft";
-  if (intent === "schedule") return "scheduled";
-  return current ?? "draft";
+function parseForm(input: DrillInput) {
+  const parsed = drillInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: { ok: false as const, error: "Please fix the highlighted fields.", fieldErrors: issuesToErrors(parsed.error) },
+    };
+  }
+  return { values: parsed.data };
 }
 
 export async function createDrill(input: DrillInput): Promise<ActionResult<{ id: string }>> {
-  const parsed = drillInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: "Please fix the highlighted fields.", fieldErrors: issuesToErrors(parsed.error) };
-  }
-  const values = parsed.data;
+  const { values, error } = parseForm(input);
+  if (error) return error;
   if (values.intent === "schedule" && !values.scheduledAt) {
     return {
       ok: false,
@@ -89,167 +53,34 @@ export async function createDrill(input: DrillInput): Promise<ActionResult<{ id:
     };
   }
 
-  const { user, org } = await getCurrentUser();
-
-  try {
-    const id = await db.transaction(async (tx) => {
-      const status = statusForIntent(values.intent);
-      const [drill] = await tx
-        .insert(drills)
-        .values({
-          orgId: org.id,
-          name: values.name,
-          type: values.type,
-          status,
-          description: values.description || null,
-          scenario: values.scenario ?? null,
-          config: { sector: values.sector, templateId: values.templateId ?? null },
-          scheduledAt: values.scheduledAt ? new Date(values.scheduledAt) : null,
-          createdBy: user.id,
-        })
-        .returning({ id: drills.id });
-
-      await tx.insert(drillObjectives).values(
-        values.objectives.map((o, i) => ({
-          drillId: drill.id,
-          description: o.description,
-          criteriaType: o.criteriaType,
-          targetValue: o.targetValue,
-          weight: o.weight,
-          sortOrder: i,
-        })),
-      );
-
-      const userMap = await resolveParticipantUsers(tx, org.id, values.participants);
-      await tx.insert(drillParticipants).values(
-        values.participants.map((p) => ({
-          drillId: drill.id,
-          userId: userMap.get(p.email)!.id,
-          role: p.role,
-        })),
-      );
-
-      await tx.insert(drillEvents).values({
-        drillId: drill.id,
-        eventType: "system",
-        actor: user.id,
-        payload: { kind: "status_change", from: null, to: status, text: `Drill created as ${status}` },
-      });
-
-      return drill.id;
-    });
-
+  const { objectives, ...rest } = toCore(values);
+  const result = await runCore(
+    (ctx) =>
+      create(ctx, {
+        ...rest,
+        objectives: objectives.map(({ id: _id, ...o }) => o),
+        templateId: values.templateId ?? undefined,
+        status: values.intent === "schedule" ? "scheduled" : "draft",
+      }),
+    SAVE_FAILED,
+  );
+  if (result.ok) {
     revalidatePath("/drills");
     revalidatePath("/");
-    return { ok: true, data: { id } };
-  } catch (err) {
-    if (err instanceof UserFacingError) return { ok: false, error: err.message };
-    console.error("createDrill failed", err);
-    return { ok: false, error: "Something went wrong while saving the drill." };
   }
+  return result;
 }
 
-export async function updateDrill(
-  drillId: string,
-  input: DrillInput,
-): Promise<ActionResult<{ id: string }>> {
-  const parsed = drillInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: "Please fix the highlighted fields.", fieldErrors: issuesToErrors(parsed.error) };
-  }
-  const values = parsed.data;
-  const { user, org } = await getCurrentUser();
+export async function updateDrill(drillId: string, input: DrillInput): Promise<ActionResult<{ id: string }>> {
+  const { values, error } = parseForm(input);
+  if (error) return error;
 
-  try {
-    await db.transaction(async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(drills)
-        .where(and(eq(drills.id, drillId), eq(drills.orgId, org.id)));
-      if (!current) throw new UserFacingError("Drill not found.");
-
-      const status = statusForIntent(values.intent, current.status);
-      if (status === "scheduled" && !values.scheduledAt) {
-        throw new UserFacingError("Pick a date and time to schedule this drill.");
-      }
-
-      await tx
-        .update(drills)
-        .set({
-          name: values.name,
-          type: values.type,
-          status,
-          description: values.description || null,
-          scenario: values.scenario ?? current.scenario,
-          config: { ...current.config, sector: values.sector },
-          scheduledAt: values.scheduledAt ? new Date(values.scheduledAt) : null,
-        })
-        .where(eq(drills.id, drillId));
-
-      if (status !== current.status) {
-        await tx.insert(drillEvents).values({
-          drillId,
-          eventType: "system",
-          actor: user.id,
-          payload: { kind: "status_change", from: current.status, to: status, text: `Status changed to ${status}` },
-        });
-      }
-
-      // Objectives: update existing (keeps their scores), insert new, delete removed.
-      const existingObjectives = await tx
-        .select({ id: drillObjectives.id })
-        .from(drillObjectives)
-        .where(eq(drillObjectives.drillId, drillId));
-      const keepIds = new Set(values.objectives.map((o) => o.id).filter(Boolean) as string[]);
-      const removed = existingObjectives.filter((o) => !keepIds.has(o.id)).map((o) => o.id);
-      if (removed.length) {
-        await tx.delete(drillObjectives).where(inArray(drillObjectives.id, removed));
-      }
-      for (const [i, o] of values.objectives.entries()) {
-        const row = {
-          description: o.description,
-          criteriaType: o.criteriaType,
-          targetValue: o.targetValue,
-          weight: o.weight,
-          sortOrder: i,
-        };
-        if (o.id && existingObjectives.some((e) => e.id === o.id)) {
-          await tx.update(drillObjectives).set(row).where(eq(drillObjectives.id, o.id));
-        } else {
-          await tx.insert(drillObjectives).values({ ...row, drillId });
-        }
-      }
-
-      // Participants: sync by user.
-      const userMap = await resolveParticipantUsers(tx, org.id, values.participants);
-      const existingParticipants = await tx
-        .select()
-        .from(drillParticipants)
-        .where(eq(drillParticipants.drillId, drillId));
-      const wanted = new Map(values.participants.map((p) => [userMap.get(p.email)!.id, p.role]));
-      const toDelete = existingParticipants.filter((p) => !wanted.has(p.userId)).map((p) => p.id);
-      if (toDelete.length) {
-        await tx.delete(drillParticipants).where(inArray(drillParticipants.id, toDelete));
-      }
-      for (const [userId, role] of wanted) {
-        const match = existingParticipants.find((p) => p.userId === userId);
-        if (match) {
-          if (match.role !== role) {
-            await tx.update(drillParticipants).set({ role }).where(eq(drillParticipants.id, match.id));
-          }
-        } else {
-          await tx.insert(drillParticipants).values({ drillId, userId, role });
-        }
-      }
-    });
-
+  const status = values.intent === "draft" ? "draft" : values.intent === "schedule" ? "scheduled" : undefined;
+  const result = await runCore((ctx) => update(ctx, drillId, { ...toCore(values), status }), SAVE_FAILED);
+  if (result.ok) {
     revalidatePath("/drills");
     revalidatePath(`/drills/${drillId}`);
     revalidatePath("/");
-    return { ok: true, data: { id: drillId } };
-  } catch (err) {
-    if (err instanceof UserFacingError) return { ok: false, error: err.message };
-    console.error("updateDrill failed", err);
-    return { ok: false, error: "Something went wrong while saving the drill." };
   }
+  return result;
 }

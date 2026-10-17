@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { DrillTemplateRow } from "@drillforce/db";
+import type { DrillTemplateRow } from "@drillforce/core";
 import {
   COMPETENCY_AREAS,
   CRITERIA_TYPE_LABELS,

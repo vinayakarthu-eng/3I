@@ -27,4 +27,6 @@ export class BaseAdapter {
   async createChannel(_name, _topic) {}
   async send(_message) {}
   async addReaction(_emoji) {}
+  /** The incident closed (after-action posted). */
+  async closeChannel() {}
 }

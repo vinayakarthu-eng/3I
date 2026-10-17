@@ -1,7 +1,10 @@
 import { DRILL_STATUSES, WEBHOOK_EVENTS } from "@drillforce/shared";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { updateDrillInput } from "./drill-edits";
+import { drillEventInput } from "./drill-live";
 import { createDrillInput, scoreInput } from "./drill-writes";
+import { actionUpdateInput } from "./improvement-actions";
 import { orgSettingsInput } from "./settings";
 import { webhookInput } from "./webhooks";
 
@@ -48,7 +51,11 @@ export const ENDPOINTS: Endpoint[] = [
 
   { method: "GET", path: "/drills", tag: "Drills", summary: "List drills", operationId: "listDrills", query: [limit], returns: "drills" },
   { method: "POST", path: "/drills", tag: "Drills", summary: "Create a drill (templateId, or name+type+objectives)", operationId: "createDrill", body: createDrillInput },
-  { method: "GET", path: "/drills/{id}", tag: "Drills", summary: "Get a drill with objectives, participants, events and scores", operationId: "getDrill" },
+  { method: "GET", path: "/drills/{id}", tag: "Drills", summary: "Get a drill with objectives and participants", operationId: "getDrill" },
+  { method: "PUT", path: "/drills/{id}", tag: "Drills", summary: "Replace a drill's details, objectives and participants", operationId: "updateDrill", body: updateDrillInput },
+  { method: "DELETE", path: "/drills/{id}", tag: "Drills", summary: "Delete a drill and everything recorded for it", operationId: "deleteDrill" },
+  { method: "POST", path: "/drills/{id}/events", tag: "Drills", summary: "Record a message, action, signal or observation", operationId: "recordDrillEvent", body: drillEventInput },
+  { method: "POST", path: "/drills/{id}/rescore", tag: "Drills", summary: "Re-run auto-scoring for an ended drill", operationId: "rescoreDrill" },
   { method: "POST", path: "/drills/{id}/status", tag: "Drills", summary: "Change status (validated transition; scoring auto-scores)", operationId: "changeDrillStatus", body: statusInput },
   { method: "GET", path: "/drills/{id}/injects", tag: "Drills", summary: "List a drill's timed injects", operationId: "listDrillInjects", returns: "injects" },
   { method: "POST", path: "/drills/{id}/injects/{injectId}/fire", tag: "Drills", summary: "Fire an inject (idempotent)", operationId: "fireInject" },
@@ -72,6 +79,7 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/compliance", tag: "Readiness", summary: "Compliance status per framework", operationId: "getCompliance", returns: "frameworks" },
   { method: "GET", path: "/certifications", tag: "Readiness", summary: "Certifications, holders and your progress", operationId: "listCertifications", returns: "certifications" },
   { method: "GET", path: "/actions", tag: "Readiness", summary: "Improvement actions", operationId: "listActions", returns: "actions" },
+  { method: "PUT", path: "/actions/{actionId}", tag: "Readiness", summary: "Update an improvement action (status workflow enforced)", operationId: "updateAction", body: actionUpdateInput },
 
   { method: "GET", path: "/webhooks", tag: "Webhooks", summary: "List webhooks (secrets redacted)", operationId: "listWebhooks", returns: "webhooks" },
   { method: "POST", path: "/webhooks", tag: "Webhooks", summary: "Create a webhook", operationId: "createWebhook", body: webhookInput },

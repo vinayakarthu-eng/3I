@@ -1,5 +1,5 @@
 import type { WebClient } from "@slack/web-api";
-import { db, eq, users } from "@drillforce/db";
+import { system } from "@drillforce/core";
 
 interface ResolvedUser {
   /** DrillForce user id when the Slack email matches an org member; else "slack:<id>". */
@@ -23,7 +23,7 @@ export async function resolveSlackUser(client: WebClient, slackUserId: string): 
     const name = profile?.real_name || profile?.display_name || info.user?.name || slackUserId;
     resolved = { actor: `slack:${slackUserId}`, name, email };
     if (email) {
-      const [match] = await db.select().from(users).where(eq(users.email, email));
+      const match = await system.findUserByEmail(email);
       if (match) resolved = { actor: match.id, name: match.name, email };
     }
   } catch (err) {

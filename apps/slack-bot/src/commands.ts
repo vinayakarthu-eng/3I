@@ -1,17 +1,5 @@
 import type { WebClient } from "@slack/web-api";
-import {
-  asc,
-  count,
-  db,
-  drillEvents,
-  drillObjectives,
-  drillParticipants,
-  drills,
-  eq,
-  sql,
-  users,
-  type Drill,
-} from "@drillforce/db";
+import { changeDrillStatus, system, type Drill } from "@drillforce/core";
 import {
   CRITERIA_TYPE_LABELS,
   DRILL_STATUS_LABELS,
@@ -58,17 +46,7 @@ export async function handleCommand(text: string, ctx: CommandContext) {
 }
 
 /** Accepts a full UUID or a unique prefix of at least 6 characters. */
-async function findDrill(idOrPrefix: string): Promise<Drill | "ambiguous" | null> {
-  const id = idOrPrefix.toLowerCase();
-  if (!/^[0-9a-f-]{6,36}$/.test(id)) return null;
-  const rows = await db
-    .select()
-    .from(drills)
-    .where(sql`${drills.id}::text like ${id + "%"}`)
-    .limit(2);
-  if (rows.length > 1) return "ambiguous";
-  return rows[0] ?? null;
-}
+const findDrill = system.findDrillByIdPrefix;
 
 function channelNameFor(drill: Drill) {
   const slug = drill.name
@@ -119,11 +97,7 @@ async function startDrill(arg: string, ctx: CommandContext) {
   const channel = await createChannel(ctx.client, channelNameFor(drill));
 
   // Invite participants (matched by email) plus whoever started the drill.
-  const participants = await db
-    .select({ id: drillParticipants.id, role: drillParticipants.role, name: users.name, email: users.email })
-    .from(drillParticipants)
-    .innerJoin(users, eq(users.id, drillParticipants.userId))
-    .where(eq(drillParticipants.drillId, drill.id));
+  const participants = await system.listDrillParticipantContacts(drill.id);
 
   const slackIds = new Set<string>([ctx.userId]);
   const notInSlack: string[] = [];
@@ -138,38 +112,25 @@ async function startDrill(arg: string, ctx: CommandContext) {
     console.warn("Some invites failed:", (err as { data?: { error?: string } }).data?.error ?? err);
   }
 
-  const objectives = await db
-    .select()
-    .from(drillObjectives)
-    .where(eq(drillObjectives.drillId, drill.id))
-    .orderBy(asc(drillObjectives.sortOrder));
+  const objectives = await system.listDrillObjectives(drill.id);
 
-  // Mark the drill active and remember where it runs.
-  const startedAt = new Date();
-  const [updated] = await db
-    .update(drills)
-    .set({
-      status: "active",
-      startedAt,
-      config: { ...drill.config, slack: { channelId: channel.id, channelName: channel.name } },
-    })
-    .where(eq(drills.id, drill.id))
-    .returning();
-
+  // Mark the drill active (through core: validated transition, timeline event, drill.started
+  // webhook) and remember where it runs. A Scheduled drill passes through Briefing first.
   const starter = await resolveSlackUser(ctx.client, ctx.userId);
-  await logEvent({
-    drillId: drill.id,
-    eventType: "system",
-    actor: starter.actor,
-    channel: `#${channel.name}`,
-    payload: {
-      kind: "status_change",
-      from: drill.status,
-      to: "active",
-      text: `Drill started in Slack (#${channel.name}) by ${starter.name}`,
-    },
-    occurredAt: startedAt,
+  const acting = await system.actingCtx(drill, starter.actor);
+  const attribution = { actor: starter.actor, channel: `#${channel.name}` };
+  if (drill.status === "scheduled") {
+    await changeDrillStatus(acting, drill.id, "briefing", {
+      ...attribution,
+      text: `Briefing opened in Slack (#${channel.name}) by ${starter.name}`,
+    });
+  }
+  await changeDrillStatus(acting, drill.id, "active", {
+    ...attribution,
+    text: `Drill started in Slack (#${channel.name}) by ${starter.name}`,
+    config: { slack: { channelId: channel.id, channelName: channel.name } },
   });
+  const updated = (await system.getDrillById(drill.id))!;
 
   await ctx.sessions.attach(updated, { channelId: channel.id, channelName: channel.name });
   const injectCount = ctx.sessions.get(channel.id)?.pendingInjects.length ?? 0;
@@ -217,7 +178,7 @@ async function drillStatus(arg: string, ctx: CommandContext) {
   const session = ctx.sessions.get(ctx.channelId);
   let drill: Drill | null = null;
   if (session) {
-    [drill] = await db.select().from(drills).where(eq(drills.id, session.drillId));
+    drill = await system.getDrillById(session.drillId);
   } else if (arg) {
     const found = await findDrill(arg);
     drill = found === "ambiguous" ? null : found;
@@ -226,15 +187,8 @@ async function drillStatus(arg: string, ctx: CommandContext) {
     return ctx.respond("Run `/drillforce status` inside a drill channel, or pass a drill ID.");
   }
 
-  const objectives = await db
-    .select()
-    .from(drillObjectives)
-    .where(eq(drillObjectives.drillId, drill.id))
-    .orderBy(asc(drillObjectives.sortOrder));
-  const [{ value: eventCount }] = await db
-    .select({ value: count() })
-    .from(drillEvents)
-    .where(eq(drillEvents.drillId, drill.id));
+  const objectives = await system.listDrillObjectives(drill.id);
+  const { total: eventCount } = await system.getDrillEventStats(drill.id);
 
   return ctx.respond(
     [
@@ -263,31 +217,22 @@ async function endDrill(ctx: CommandContext) {
   const session = ctx.sessions.get(ctx.channelId);
   if (!session) return ctx.respond("Run `/drillforce end` inside an active drill channel.");
 
-  const [drill] = await db.select().from(drills).where(eq(drills.id, session.drillId));
+  const drill = await system.getDrillById(session.drillId);
   if (!drill || drill.status !== "active") {
     ctx.sessions.detach(ctx.channelId);
     return ctx.respond("This drill is no longer active.");
   }
 
-  const endedAt = new Date();
+  // Through core: timeline event, drill.ended webhook, then auto-scoring (+ drill.scored).
   const ender = await resolveSlackUser(ctx.client, ctx.userId);
-  await db.update(drills).set({ status: "scoring", endedAt }).where(eq(drills.id, drill.id));
-  await logEvent({
-    drillId: drill.id,
-    eventType: "system",
+  ctx.sessions.detach(ctx.channelId);
+  await changeDrillStatus(await system.actingCtx(drill, ender.actor), drill.id, "scoring", {
     actor: ender.actor,
     channel: `#${session.channelName}`,
-    payload: { kind: "status_change", from: "active", to: "scoring", text: `Drill ended in Slack by ${ender.name}` },
-    occurredAt: endedAt,
+    text: `Drill ended in Slack by ${ender.name}`,
   });
-  ctx.sessions.detach(ctx.channelId);
 
-  const byType = await db
-    .select({ type: drillEvents.eventType, value: count() })
-    .from(drillEvents)
-    .where(eq(drillEvents.drillId, drill.id))
-    .groupBy(drillEvents.eventType);
-  const total = byType.reduce((a, r) => a + r.value, 0);
+  const { total, byType } = await system.getDrillEventStats(drill.id);
   const breakdown = byType.map((r) => `${r.value} ${r.type}`).join(", ");
 
   await ctx.client.chat.postMessage({

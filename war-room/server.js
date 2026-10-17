@@ -12,6 +12,7 @@ import { Liaison } from "./src/agents/liaison.js";
 import { Orchestrator } from "./src/agents/orchestrator.js";
 import { SME } from "./src/agents/sme.js";
 import { Scribe } from "./src/agents/scribe.js";
+import { DrillForceAdapter } from "./src/adapters/drillforce-adapter.js";
 import { WsAdapter } from "./src/adapters/ws-adapter.js";
 import { InjectEngine } from "./src/engine/inject-engine.js";
 import { SCENARIOS, findScenario } from "./src/engine/scenarios.js";
@@ -80,14 +81,20 @@ class WarRoom {
 
     for (const a of this.adapters) {
       try {
-        await a.createChannel(state.channelName, topic, { invite });
+        await a.createChannel(state.channelName, topic, { invite, scenario });
       } catch (err) {
         console.error(`[${a.name}] createChannel failed:`, err.message);
       }
     }
 
     const agents = this.makeAgents();
-    const orchestrator = new Orchestrator({ state, agents, send: (m, ex) => this.send(m, ex), speed });
+    const orchestrator = new Orchestrator({
+      state,
+      agents,
+      send: (m, ex) => this.send(m, ex),
+      speed,
+      onClose: () => Promise.all(this.adapters.map((a) => a.closeChannel().catch(() => {}))),
+    });
     const injectEngine = new InjectEngine(scenario, speed, { onInject: (inj) => orchestrator.onInject(inj) });
     const timers = [
       setInterval(() => orchestrator.statusCheck(), Math.max(15000, 60000 / speed)),
@@ -211,6 +218,9 @@ wss.on("connection", (ws) => {
 
 // ─── boot ─────────────────────────────────────────────────────────────────────
 async function boot() {
+  const recorder = DrillForceAdapter.fromEnv();
+  if (recorder) warRoom.addAdapter(recorder);
+
   if (slackReady) {
     try {
       const { SlackAdapter } = await import("./src/adapters/slack-adapter.js");
@@ -240,6 +250,8 @@ function banner() {
   console.log(`  ▶  Dashboard:  http://localhost:${PORT}`);
   console.log(`  ▶  Scenarios:  ${SCENARIOS.map((s) => s.slug).join(", ")}`);
   console.log(`  ▶  Agents:     IC · Deputy · SME · Comms · Liaison · Scribe`);
+  const recorder = warRoom.adapters.find((a) => a.name === "drillforce");
+  console.log(`  ▶  DrillForce: ${recorder ? `recording drills via ${recorder.root}` : "off (set DRILLFORCE_API_URL + DRILLFORCE_API_KEY)"}`);
   if (warRoom.mode === "simulator") {
     console.log(`${line}`);
     console.log(`  Simulator mode — drive the drill from the dashboard.`);

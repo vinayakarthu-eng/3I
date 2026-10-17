@@ -45,6 +45,10 @@ export type CreateDrillInput = core.CreateDrillInput;
 export type ScoreInput = core.ScoreInput;
 export type WebhookInput = core.WebhookInput;
 export type OrgSettingsInput = core.OrgSettingsInput;
+export type UpdateDrillInput = core.UpdateDrillInput;
+export type DrillEventInput = core.DrillEventInput;
+export type ActionUpdateInput = core.ActionUpdateInput;
+export type DrillEvent = Data<typeof core.recordDrillEvent>;
 export type { DrillStatus, WebhookEvent };
 
 export interface ApiErrorBody {
@@ -117,6 +121,13 @@ export class DrillForce {
       (await this.request<{ drills: DrillSummary[] }>("GET", "/drills", undefined, opts)).drills,
     get: (id: string) => this.request<Drill>("GET", `/drills/${this.id(id)}`),
     create: (input: CreateDrillInput) => this.request<{ id: string }>("POST", "/drills", input),
+    update: (id: string, input: UpdateDrillInput) => this.request<Drill>("PUT", `/drills/${this.id(id)}`, input),
+    delete: (id: string) => this.request<{ id: string; deleted: true }>("DELETE", `/drills/${this.id(id)}`),
+    /** Record a message/action/signal/observation; `actor` may be "bot", "agent:<name>" or "slack:<id>". */
+    recordEvent: (id: string, event: DrillEventInput) =>
+      this.request<DrillEvent>("POST", `/drills/${this.id(id)}/events`, event),
+    rescore: (id: string) =>
+      this.request<{ scored: number; finalized: boolean }>("POST", `/drills/${this.id(id)}/rescore`),
     changeStatus: (id: string, status: DrillStatus) =>
       this.request<{ id: string; status: DrillStatus }>("POST", `/drills/${this.id(id)}/status`, { status }),
     injects: async (id: string) =>
@@ -169,6 +180,8 @@ export class DrillForce {
 
   readonly actions = {
     list: async () => (await this.request<{ actions: ImprovementActionRow[] }>("GET", "/actions")).actions,
+    update: (actionId: string, input: ActionUpdateInput) =>
+      this.request<ImprovementAction>("PUT", `/actions/${this.id(actionId)}`, input),
   };
 
   readonly webhooks = {

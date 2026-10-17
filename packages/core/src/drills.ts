@@ -10,13 +10,14 @@ import {
   eq,
   sql,
 } from "@drillforce/db";
+import type { DrillStatus, DrillType } from "@drillforce/shared";
 import type { Ctx } from "./context";
 import { notFound } from "./errors";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
 /** Weighted composite per drill = Σ(score·weight)/Σweight; null when unscored. */
-const compositeScores = db
+export const compositeScores = db
   .select({
     drillId: drillScores.drillId,
     score: sql<string | null>`
@@ -33,8 +34,8 @@ const compositeScores = db
 export interface DrillSummary {
   id: string;
   name: string;
-  type: string;
-  status: string;
+  type: DrillType;
+  status: DrillStatus;
   scheduledAt: Date | null;
   createdAt: Date;
   score: number | null;
@@ -118,14 +119,7 @@ export async function listDrillInjects(ctx: Ctx, drillId: string) {
   if (!owned) throw notFound("Drill");
 
   return db
-    .select({
-      id: drillInjects.id,
-      description: drillInjects.description,
-      triggerAtMinutes: drillInjects.triggerAtMinutes,
-      injectType: drillInjects.injectType,
-      payload: drillInjects.payload,
-      fired: drillInjects.fired,
-    })
+    .select()
     .from(drillInjects)
     .where(eq(drillInjects.drillId, drillId))
     .orderBy(asc(drillInjects.triggerAtMinutes), asc(drillInjects.sortOrder));

@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
-    "@drillforce/db": "*",
+    "@drillforce/core": "*",
     "@drillforce/shared": "*",
     "@slack/bolt": "^5.1.0",
     "@slack/web-api": "^8.2.0",

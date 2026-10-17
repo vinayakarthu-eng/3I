@@ -12,6 +12,8 @@ tracked improvement actions.
 | `apps/slack-bot` | Slack Bolt (socket mode) IC bot: `/drillforce start\|status\|inject\|end` — see its [README](apps/slack-bot/README.md) |
 | `workers/scoring-engine` | Auto-scores drills in *Scoring* from their events; computes the composite |
 | `workers/report-generator` | Generates After-Action Reports for drills in *Debriefing* (Claude, or a template without an API key) |
+| `packages/core` | The domain layer — every read and write, org-scoped by `Ctx`. The web app, the `/api/v1` API and the Slack bot all go through it |
+| `packages/sdk` | Typed client for `/api/v1` — see its [README](packages/sdk/README.md) |
 | `packages/db` | Drizzle ORM schema, migrations, seed (PostgreSQL 16) |
 | `packages/shared` | Shared types, labels, drill templates, workflow rules |
 
@@ -30,6 +32,13 @@ npm run dev               # web on http://localhost:3000 + bot + workers
 
 Without Slack tokens the bot exits with a warning and everything else keeps running. Without
 `ANTHROPIC_API_KEY` the IC bot uses scripted challenges and AARs come from a template generator.
+
+## API
+
+Everything the UI does is available over HTTP at `/api/v1` with an API key (Settings → API keys):
+`Authorization: Bearer df_live_…`. The OpenAPI document is served at `/api/v1/openapi.json`, and
+`packages/sdk` wraps it in a typed client. Writes made through the API fire the same webhooks as
+the UI. The [War Room](war-room/SETUP.md) can record its incidents as drills through it.
 
 ## Drill lifecycle
 

@@ -352,6 +352,43 @@ looks identical to downstream subscribers.
 - Verified: SDK unit tests 5/5, contract tests 3/3, and a live run of every SDK method against
   the dev server (incl. 404 and 401 paths). `typecheck` 8/8.
 
+### Headless — web, Slack bot and War Room on core (done)
+
+**Rule now enforced:** nothing outside `packages/core` (and the workers it wraps) touches the
+database. A contract test fails if `apps/web` imports `@drillforce/db`, the scoring engine or the
+report generator.
+
+- **New core modules:** `views.ts` (the web read models: drill detail graph, dashboard stats,
+  competency stats, trends — all org-scoped), `drill-edits.ts` (wizard save, rename, description,
+  scenario, delete, duplicate, objectives, participants), `drill-live.ts` (readiness, timeline
+  events, re-scoring), `improvement-actions.ts`, `actor.ts` (the demo-auth stand-in), and `bot.ts`
+  exported as `system` — cross-org lookups for the trusted Slack bot, kept apart from
+  key-scoped operations.
+- `changeDrillStatus` / `fireInject` accept attribution (`actor`, `channel`, `text`) so
+  integrations keep their own timeline wording; `fireInject` is now race-safe (conditional update).
+- **Web:** every server action is a thin `runCore` wrapper (core `ApiError` →
+  `{ ok:false, error, fieldErrors }`); `lib/queries.ts` keeps its signatures over core.
+  Side-effects of going through one path: the drill header's status menu now auto-scores on
+  entering Scoring and fires webhooks; manual scoring and re-scoring fire `drill.scored`.
+- **Slack bot:** `@drillforce/db` removed. `/drillforce start|end` go through
+  `changeDrillStatus` (a Scheduled drill now passes through Briefing), so `drill.started`,
+  `drill.ended` and `drill.scored` fire and the drill is scored immediately; timed injects go
+  through `fireInject` (one event, with the Slack ts, plus `inject.fired`).
+- **War Room:** new `DrillForceAdapter` (opt-in via `DRILLFORCE_API_URL` + `DRILLFORCE_API_KEY`)
+  records each incident as a drill over the public API — template-matched drill → Active, every
+  agent/human/inject message as a timeline event (`agent:<role>`, `slack:<id>`), close → Scoring.
+  Fail-soft.
+- **New API routes:** `PUT|DELETE /drills/:id`, `POST /drills/:id/events` (actor limited to
+  `bot` / `agent:*` / `slack:*` so a key can't impersonate a colleague), `POST /drills/:id/rescore`,
+  `PUT /actions/:id` — 36 operations total, in the spec and the SDK.
+- **Verified:** all 34 web server actions driven over HTTP against the dev server (46 checks incl.
+  validation messages); all 45 pages render for drills in every status; the Slack bot simulator
+  end-to-end (3 webhooks) and timed-inject firing; a live War Room incident recorded in DrillForce
+  (17 timeline events, scored, 3 webhooks). `typecheck` 8/8, tests 7+5+4, lint clean, `next build`
+  passes. All test data removed.
+- **Still open:** real auth (Clerk) in place of `resolveDefaultActor`; per-org Slack install
+  (the bot is still one workspace for all orgs); optional standalone `apps/api`.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),
