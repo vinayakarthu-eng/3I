@@ -114,6 +114,14 @@ export async function autoScoreDrill(drillId: string) {
   return { scored: scored.length, finalized };
 }
 
+/** An evaluator submitted scores that don't fit the drill's objectives (a caller mistake, not a fault). */
+export class ScoreInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScoreInputError";
+  }
+}
+
 export interface ManualScoreInput {
   objectiveId: string;
   notes?: string;
@@ -129,14 +137,14 @@ export async function recordManualScores(drillId: string, evaluatorId: string, i
 
   const rows = inputs.map((input) => {
     const o = byId.get(input.objectiveId);
-    if (!o) throw new Error("Objective does not belong to this drill");
+    if (!o) throw new ScoreInputError("Objective does not belong to this drill");
     if (o.criteriaType === "quality") {
-      if (!input.ratings?.length) throw new Error(`Rate every dimension for “${o.description}”`);
+      if (!input.ratings?.length) throw new ScoreInputError(`Rate every dimension for “${o.description}”`);
       const r = scoreQuality(input.ratings);
       return { o, rawValue: r.rawValue, score: r.normalizedScore, evidence: { ...r.evidence, notes: input.notes ?? "" } };
     }
     if (o.criteriaType === "accuracy") {
-      if (!input.verdict) throw new Error(`Choose a verdict for “${o.description}”`);
+      if (!input.verdict) throw new ScoreInputError(`Choose a verdict for “${o.description}”`);
       return {
         o,
         rawValue: null,
@@ -144,7 +152,7 @@ export async function recordManualScores(drillId: string, evaluatorId: string, i
         evidence: { verdict: input.verdict, notes: input.notes ?? "" },
       };
     }
-    throw new Error(`“${o.description}” is scored automatically`);
+    throw new ScoreInputError(`“${o.description}” is scored automatically`);
   });
 
   await db.transaction(async (tx) => {

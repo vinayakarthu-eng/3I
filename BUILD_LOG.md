@@ -312,9 +312,9 @@ looks identical to downstream subscribers.
 - Verified against a local receiver: all four events delivered with valid HMAC signatures and
   logged in `webhook_deliveries`; re-firing an inject sends nothing. `typecheck` 7/7.
 - **Found, not fixed:** the UI drill-header status change (`drills/[id]/actions.ts`) and UI manual
-  scoring emit no webhooks (fixed for free when the UI moves to core); `POST /drills/:id/scores`
-  returns 500 instead of 400 when an objective is auto-scored (scoring engine throws a plain
-  `Error`).
+  scoring emit no webhooks (fixed for free when the UI moves to core).
+- **Fixed:** `POST /drills/:id/scores` returned 500 for bad objective input; the scoring engine now
+  throws a `ScoreInputError` that core maps to a 400.
 
 ### Summary
 

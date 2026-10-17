@@ -21,7 +21,7 @@ import {
   canTransition,
   type DrillStatus,
 } from "@drillforce/shared";
-import { autoScoreDrill, recordManualScores } from "@drillforce/scoring-engine";
+import { ScoreInputError, autoScoreDrill, recordManualScores } from "@drillforce/scoring-engine";
 import { z } from "zod";
 import type { Ctx } from "./context";
 import { badRequest, notFound } from "./errors";
@@ -292,7 +292,13 @@ export async function submitScores(ctx: Ctx, drillId: string, raw: unknown) {
   const parsed = scoreInput.safeParse(raw);
   if (!parsed.success) throw badRequest("Invalid scores payload.", flatten(parsed.error));
 
-  const result = await recordManualScores(drillId, ctx.userId, parsed.data);
+  let result: Awaited<ReturnType<typeof recordManualScores>>;
+  try {
+    result = await recordManualScores(drillId, ctx.userId, parsed.data);
+  } catch (err) {
+    if (err instanceof ScoreInputError) throw badRequest(err.message);
+    throw err;
+  }
   if (result) {
     await awardCertifications(db, ctx.orgId);
     await evaluateDrillCompliance(db, ctx.orgId, drillId);
