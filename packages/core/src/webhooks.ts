@@ -1,6 +1,10 @@
 import { and, asc, db, desc, eq, webhookDeliveries, webhooks } from "@drillforce/db";
-import type { WebhookEvent } from "@drillforce/shared";
+import { WEBHOOK_EVENTS, type WebhookEvent } from "@drillforce/shared";
 import crypto from "node:crypto";
+import { z } from "zod";
+import type { Ctx } from "./context";
+import { badRequest, notFound } from "./errors";
+import { flatten } from "./validation";
 
 export async function listWebhooks(orgId: string) {
   return db.select().from(webhooks).where(eq(webhooks.orgId, orgId)).orderBy(asc(webhooks.createdAt));
@@ -93,4 +97,69 @@ export async function sendTestDelivery(orgId: string, webhookId: string) {
   if (!w) return { ok: false as const, error: "Webhook not found." };
   const result = await deliver(w, "test.ping", { message: "DrillForce test delivery", webhookId });
   return { ok: true as const, result };
+}
+
+// ─── management ───────────────────────────────────────────────────────────────
+const UUID = /^[0-9a-f-]{36}$/i;
+
+export const webhookInput = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120),
+  url: z.string().trim().url("Enter a valid URL"),
+  events: z.array(z.enum(WEBHOOK_EVENTS)).min(1, "Select at least one event"),
+  secret: z.string().trim().max(200).optional().default(""),
+  active: z.boolean().optional().default(true),
+});
+export type WebhookInput = z.input<typeof webhookInput>;
+
+function parseWebhook(raw: unknown) {
+  const parsed = webhookInput.safeParse(raw);
+  if (!parsed.success) throw badRequest(parsed.error.issues[0].message, flatten(parsed.error));
+  const { secret, ...rest } = parsed.data;
+  return { ...rest, secret: secret || null };
+}
+
+/** API-safe view: never echo the signing secret back. */
+export function redactWebhook(w: typeof webhooks.$inferSelect) {
+  const { secret, ...rest } = w;
+  return { ...rest, hasSecret: !!secret };
+}
+
+export async function createWebhook(ctx: Ctx, raw: unknown) {
+  const [row] = await db
+    .insert(webhooks)
+    .values({ orgId: ctx.orgId, ...parseWebhook(raw) })
+    .returning();
+  return row;
+}
+
+export async function updateWebhook(ctx: Ctx, id: string, raw: unknown) {
+  if (!UUID.test(id)) throw notFound("Webhook");
+  const [row] = await db
+    .update(webhooks)
+    .set(parseWebhook(raw))
+    .where(and(eq(webhooks.id, id), eq(webhooks.orgId, ctx.orgId)))
+    .returning();
+  if (!row) throw notFound("Webhook");
+  return row;
+}
+
+export async function setWebhookActive(ctx: Ctx, id: string, active: boolean) {
+  if (!UUID.test(id)) throw notFound("Webhook");
+  const [row] = await db
+    .update(webhooks)
+    .set({ active })
+    .where(and(eq(webhooks.id, id), eq(webhooks.orgId, ctx.orgId)))
+    .returning();
+  if (!row) throw notFound("Webhook");
+  return row;
+}
+
+export async function deleteWebhook(ctx: Ctx, id: string) {
+  if (!UUID.test(id)) throw notFound("Webhook");
+  const [row] = await db
+    .delete(webhooks)
+    .where(and(eq(webhooks.id, id), eq(webhooks.orgId, ctx.orgId)))
+    .returning({ id: webhooks.id });
+  if (!row) throw notFound("Webhook");
+  return { id, deleted: true };
 }

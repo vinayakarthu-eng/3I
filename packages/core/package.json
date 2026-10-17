@@ -13,8 +13,9 @@
   },
   "dependencies": {
     "@drillforce/db": "*",
-    "@drillforce/shared": "*",
+    "@drillforce/report-generator": "*",
     "@drillforce/scoring-engine": "*",
+    "@drillforce/shared": "*",
     "drizzle-orm": "^0.45.4",
     "zod": "^3.24.1"
   },

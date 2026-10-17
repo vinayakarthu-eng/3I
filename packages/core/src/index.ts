@@ -51,5 +51,27 @@ export {
   listRecentDeliveries,
   dispatchWebhookEvent,
   sendTestDelivery,
+  createWebhook,
+  updateWebhook,
+  setWebhookActive,
+  deleteWebhook,
+  redactWebhook,
+  webhookInput,
   type DeliveryRow,
+  type WebhookInput,
 } from "./webhooks";
+export {
+  listReports,
+  getDrillReport,
+  getReport,
+  generateReport,
+  approveReport,
+  createActionFromReport,
+} from "./reports";
+export {
+  getOrgSettings,
+  updateOrgSettings,
+  orgSettingsInput,
+  type OrgSettings,
+  type OrgSettingsInput,
+} from "./settings";

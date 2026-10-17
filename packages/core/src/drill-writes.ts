@@ -25,6 +25,7 @@ import { ScoreInputError, autoScoreDrill, recordManualScores } from "@drillforce
 import { z } from "zod";
 import type { Ctx } from "./context";
 import { badRequest, notFound } from "./errors";
+import { flatten } from "./validation";
 import { dispatchWebhookEvent } from "./webhooks";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -305,10 +306,4 @@ export async function submitScores(ctx: Ctx, drillId: string, raw: unknown) {
     await dispatchWebhookEvent(ctx.orgId, "drill.scored", { drillId, name: drill.name });
   }
   return { finalized: !!result, composite: result?.composite ?? null };
-}
-
-function flatten(error: z.ZodError): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const issue of error.issues) out[issue.path.join(".") || "_"] = issue.message;
-  return out;
 }

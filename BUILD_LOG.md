@@ -316,6 +316,24 @@ looks identical to downstream subscribers.
 - **Fixed:** `POST /drills/:id/scores` returned 500 for bad objective input; the scoring engine now
   throws a `ScoreInputError` that core maps to a 400.
 
+### Headless — reports, webhooks, settings endpoints (done)
+
+- **Core:** `reports.ts` (`listReports`, `getDrillReport`, `getReport`, `generateReport`,
+  `approveReport`, `createActionFromReport`), webhook management in `webhooks.ts`
+  (`createWebhook`, `updateWebhook`, `setWebhookActive`, `deleteWebhook`, `redactWebhook`), and
+  `settings.ts` (`getOrgSettings`, `updateOrgSettings`). Shared zod `flatten` moved to
+  `validation.ts`.
+- **`action.created` is now emitted** — for AAR auto-created actions and for
+  create-from-report (once; repeat calls return the existing action silently).
+- **New routes:** `GET /reports`, `GET /reports/:id`, `POST /reports/:id/approve`,
+  `POST /reports/:id/actions {index}`, `GET|POST /drills/:id/report`; `GET|POST /webhooks`,
+  `PATCH|DELETE /webhooks/:id` (PATCH `{active}` alone pauses/resumes), `POST /webhooks/:id/test`,
+  `GET /webhooks/deliveries`; `GET|PUT /settings`. Webhook responses never include the secret
+  (`hasSecret` instead).
+- Verified live with curl: CRUD + validation (400 with field errors) + 404s, test delivery,
+  settings round-trip, AAR generate → 3 `action.created` deliveries, idempotent action create,
+  double-approve rejected. `typecheck` 7/7.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),
