@@ -12,7 +12,13 @@
     "SLACK_CLIENT_SECRET",
     "SLACK_ENCRYPTION_KEY",
     "SLACK_LEGACY_ORG_ID",
-    "SLACK_API_URL"
+    "SLACK_API_URL",
+    "DD_API_KEY",
+    "DD_SITE",
+    "DD_OTLP_ENDPOINT",
+    "SCORING_DELAY_MINUTES",
+    "WAR_ROOM_URL",
+    "WAR_ROOM_TOKEN"
   ],
   "tasks": {
     "build": {

@@ -154,3 +154,4 @@ export { datadogLinks, telemetrySink, type TelemetrySink } from "./datadog";
 export { warRoomConfigured } from "./war-room";
 export { scoringDelayMinutes } from "./drill-writes";
 export { signalRowToPlan } from "./signals";
+export type { DrillSignal, SignalStats } from "@drillforce/db";

@@ -8,6 +8,7 @@ import {
   drillInjects,
   drillObjectives,
   drillParticipants,
+  drillSignals,
   drills,
   eq,
   inArray,
@@ -15,6 +16,7 @@ import {
   sql,
   users,
   type Drill,
+  type SignalStats,
 } from "@drillforce/db";
 import type { EventType } from "@drillforce/shared";
 import type { Ctx } from "./context";
@@ -156,6 +158,33 @@ export async function findUserByEmail(orgId: string, email: string) {
 }
 
 export { findSlackInstallationByOrg, findSlackInstallationByTeam, listSlackInstallations } from "./slack";
+
+// ─── injection engine (trusted worker) ────────────────────────────────────────
+/** Every stream the injection engine should be generating right now, with its drill. */
+export async function listRunningSignals() {
+  return db
+    .select({ signal: drillSignals, drill: { id: drills.id, name: drills.name, orgId: drills.orgId, status: drills.status } })
+    .from(drillSignals)
+    .innerJoin(drills, eq(drills.id, drillSignals.drillId))
+    .where(and(eq(drillSignals.status, "running"), eq(drills.status, "active")));
+}
+
+/** Persist a stream's telemetry counters (and optionally finish it or record an export error). */
+export async function updateSignalProgress(
+  signalId: string,
+  stats: SignalStats,
+  opts: { status?: "completed" | "failed"; lastError?: string | null } = {},
+) {
+  await db
+    .update(drillSignals)
+    .set({
+      stats,
+      ...(opts.status ? { status: opts.status, completedAt: new Date() } : {}),
+      ...(opts.lastError !== undefined ? { lastError: opts.lastError } : {}),
+    })
+    // Never resurrect a stream that was stopped (drill concluded) in the meantime.
+    .where(and(eq(drillSignals.id, signalId), eq(drillSignals.status, "running")));
+}
 export type { ResolvedInstallation } from "./slack";
 
 export async function markParticipantJoined(drillId: string, userId: string) {

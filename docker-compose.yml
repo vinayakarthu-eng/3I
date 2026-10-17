@@ -26,6 +26,25 @@ services:
     volumes:
       - redis-data:/data
 
+  # Datadog Agent — receives the injection engine's OTLP telemetry (traces → APM, metrics, logs) and
+  # forwards it to your Datadog account. Opt-in: `docker compose --profile datadog up -d` with
+  # DD_API_KEY (and DD_SITE if not datadoghq.com) in .env. Without it the engine runs a dry run.
+  datadog-agent:
+    image: datadog/agent:7.60.0
+    container_name: drillforce-datadog-agent
+    profiles: ["datadog"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DD_HOSTNAME: drillforce-drills
+      DD_ENV: drill
+      DD_APM_ENABLED: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: 0.0.0.0:4318
+      DD_OTLP_CONFIG_LOGS_ENABLED: "true"
+    ports:
+      - "4318:4318"
+
 volumes:
   postgres-data:
   redis-data:
