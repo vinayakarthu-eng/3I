@@ -10,5 +10,39 @@ export {
   type CreateDrillInput,
 } from "./drill-writes";
 export { listScenarios, getScenario } from "./scenarios";
-export { getReadiness, type ReadinessPeriod } from "./readiness";
+export {
+  getReadiness,
+  getReadinessMembers,
+  getReadinessOverview,
+  getTeamCompetencyTrend,
+  getUserReadiness,
+  periodSince,
+  type ReadinessPeriod,
+  type ReadinessMember,
+  type ReadinessOverview,
+  type MemberCompetency,
+  type TrendRow,
+  type UserReadiness,
+  type UserDrillHistory,
+} from "./readiness";
+export { getDrillAnalytics, getMostImproved, type DrillAnalytics, type ImprovedUser } from "./analytics";
+export {
+  getComplianceOverview,
+  getDrillComplianceEvidence,
+  evaluateCompliance,
+  type RequirementStatus,
+  type FrameworkCompliance,
+  type DrillEvidenceRow,
+} from "./compliance";
+export {
+  listCertifications,
+  getCertificationsOverview,
+  getCertificate,
+  listUserCertifications,
+  evaluateCertifications,
+  type CertHolder,
+  type CertOverviewItem,
+  type CertificateView,
+} from "./certifications";
+export { listCompetencyAreas, listImprovementActions } from "./org";
 export { listApiKeys, createApiKey, revokeApiKey, type ApiKeyRow } from "./api-keys";

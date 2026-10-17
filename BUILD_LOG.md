@@ -282,6 +282,22 @@ client. Rollout is additive — the API grows alongside the working UI, which mi
   OpenAPI spec; webhook dispatch from core (API-path writes don't emit webhooks yet); optional
   standalone `apps/api`.
 
+### Headless — broaden API coverage (done)
+
+Moved the already-`orgId`-parameterized read modules out of `apps/web/src/lib` into
+`packages/core` (single source of truth) and re-exported them from the web lib so the 9 existing
+importers keep working unchanged — so the web UI's analytics/compliance/certifications/readiness
+now run *through core*.
+
+- **Moved to core:** `analytics`, `compliance`, `certifications`, `readiness` (merged with the
+  earlier core `getReadiness`). New `org.ts`: `listCompetencyAreas`, `listImprovementActions`.
+- **New `/api/v1` reads:** `/analytics`, `/compliance`, `/certifications`, `/competencies`,
+  `/actions`, `/readiness/:userId`.
+- Verified with curl (analytics 3 drills, compliance 4 frameworks, certs 4, competencies 6,
+  actions 2, readiness profile). `typecheck` 7/7, `build` compiles all 15 `/api/v1` routes.
+- **Still ahead:** expose reports/webhooks/settings; a typed `packages/sdk`; migrate the web
+  app's remaining direct-DB reads/writes to the API/SDK; OpenAPI spec.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),
