@@ -298,6 +298,24 @@ now run *through core*.
 - **Still ahead:** expose reports/webhooks/settings; a typed `packages/sdk`; migrate the web
   app's remaining direct-DB reads/writes to the API/SDK; OpenAPI spec.
 
+### Headless — webhook dispatch from core (done)
+
+API-path writes now emit the same webhook events as the UI, so a drill driven over `/api/v1`
+looks identical to downstream subscribers.
+
+- **Moved to core:** `webhooks.ts` (`dispatchWebhookEvent`, `sendTestDelivery`, `listWebhooks`,
+  `listRecentDeliveries`); `apps/web/src/lib/webhooks.ts` re-exports it. `dispatchWebhookEvent`
+  now takes a typed `WebhookEvent`.
+- **Emitted from core writes:** `changeDrillStatus` → `drill.started` (→ active), `drill.ended`
+  (→ scoring) and `drill.scored` (auto-score finalized); `fireInject` → `inject.fired` (only on
+  first fire); `submitScores` → `drill.scored` (finalized). Payloads match the UI's.
+- Verified against a local receiver: all four events delivered with valid HMAC signatures and
+  logged in `webhook_deliveries`; re-firing an inject sends nothing. `typecheck` 7/7.
+- **Found, not fixed:** the UI drill-header status change (`drills/[id]/actions.ts`) and UI manual
+  scoring emit no webhooks (fixed for free when the UI moves to core); `POST /drills/:id/scores`
+  returns 500 instead of 400 when an objective is auto-scored (scoring engine throws a plain
+  `Error`).
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

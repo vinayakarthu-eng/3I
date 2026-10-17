@@ -46,3 +46,10 @@ export {
 } from "./certifications";
 export { listCompetencyAreas, listImprovementActions } from "./org";
 export { listApiKeys, createApiKey, revokeApiKey, type ApiKeyRow } from "./api-keys";
+export {
+  listWebhooks,
+  listRecentDeliveries,
+  dispatchWebhookEvent,
+  sendTestDelivery,
+  type DeliveryRow,
+} from "./webhooks";

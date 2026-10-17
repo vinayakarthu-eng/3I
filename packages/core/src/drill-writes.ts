@@ -25,6 +25,7 @@ import { autoScoreDrill, recordManualScores } from "@drillforce/scoring-engine";
 import { z } from "zod";
 import type { Ctx } from "./context";
 import { badRequest, notFound } from "./errors";
+import { dispatchWebhookEvent } from "./webhooks";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -217,13 +218,20 @@ export async function changeDrillStatus(ctx: Ctx, id: string, to: DrillStatus) {
     });
   });
 
+  // Same webhook events as starting/ending a drill from the live UI.
+  if (to === "active") {
+    await dispatchWebhookEvent(ctx.orgId, "drill.started", { drillId: id, name: drill.name });
+  }
+
   // Entering scoring: auto-score and re-evaluate certs/compliance (same as ending a live drill).
   if (to === "scoring") {
+    await dispatchWebhookEvent(ctx.orgId, "drill.ended", { drillId: id, name: drill.name });
     try {
       const result = await autoScoreDrill(id);
       if (result.finalized) {
         await awardCertifications(db, ctx.orgId);
         await evaluateDrillCompliance(db, ctx.orgId, id);
+        await dispatchWebhookEvent(ctx.orgId, "drill.scored", { drillId: id, name: drill.name });
       }
     } catch (err) {
       console.error("auto-scoring after status change failed", err);
@@ -256,6 +264,11 @@ export async function fireInject(ctx: Ctx, drillId: string, injectId: string) {
       occurredAt: now,
     });
   });
+  await dispatchWebhookEvent(ctx.orgId, "inject.fired", {
+    drillId,
+    injectId,
+    description: inject.description,
+  });
   return { id: injectId, fired: true };
 }
 
@@ -283,6 +296,7 @@ export async function submitScores(ctx: Ctx, drillId: string, raw: unknown) {
   if (result) {
     await awardCertifications(db, ctx.orgId);
     await evaluateDrillCompliance(db, ctx.orgId, drillId);
+    await dispatchWebhookEvent(ctx.orgId, "drill.scored", { drillId, name: drill.name });
   }
   return { finalized: !!result, composite: result?.composite ?? null };
 }
