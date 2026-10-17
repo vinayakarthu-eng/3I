@@ -141,3 +141,11 @@ export {
   slackInstallMissingConfig,
   SLACK_BOT_SCOPES,
 } from "./slack";
+export {
+  listDrillSignals,
+  getInjectionPlan,
+  replaceDrillSignals,
+  signalPlanInput,
+  signalMatrixInput,
+  type SignalPlanInput,
+} from "./signals";

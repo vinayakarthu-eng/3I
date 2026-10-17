@@ -50,6 +50,9 @@ export type UpdateDrillInput = core.UpdateDrillInput;
 export type DrillEventInput = core.DrillEventInput;
 export type ActionUpdateInput = core.ActionUpdateInput;
 export type DrillEvent = Data<typeof core.recordDrillEvent>;
+export type DrillSignal = Data<typeof core.listDrillSignals>[number];
+export type InjectionPlan = Data<typeof core.getInjectionPlan>;
+export type SignalPlanInput = core.SignalPlanInput;
 export type { DrillStatus, WebhookEvent };
 
 export interface ApiErrorBody {
@@ -127,6 +130,11 @@ export class DrillForce {
     /** Record a message/action/signal/observation; `actor` may be "bot", "agent:<name>" or "slack:<id>". */
     recordEvent: (id: string, event: DrillEventInput) =>
       this.request<DrillEvent>("POST", `/drills/${this.id(id)}/events`, event),
+    signals: async (id: string) =>
+      (await this.request<{ signals: DrillSignal[] }>("GET", `/drills/${this.id(id)}/signals`)).signals,
+    setSignals: async (id: string, signals: SignalPlanInput[]) =>
+      (await this.request<{ signals: DrillSignal[] }>("PUT", `/drills/${this.id(id)}/signals`, { signals })).signals,
+    injectionPlan: (id: string) => this.request<InjectionPlan>("GET", `/drills/${this.id(id)}/injection-plan`),
     rescore: (id: string) =>
       this.request<{ scored: number; finalized: boolean }>("POST", `/drills/${this.id(id)}/rescore`),
     changeStatus: (id: string, status: DrillStatus) =>

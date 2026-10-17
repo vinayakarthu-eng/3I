@@ -27,6 +27,7 @@ import { z } from "zod";
 import type { Ctx } from "./context";
 import { badRequest, notFound } from "./errors";
 import { flatten } from "./validation";
+import { seedSignalsFromTemplate } from "./signals";
 import { dispatchWebhookEvent } from "./webhooks";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -134,6 +135,9 @@ export async function createDrill(ctx: Ctx, raw: unknown): Promise<{ id: string 
         input.participants.map((p) => ({ drillId: drill.id, userId: byEmail.get(p.email)!.id, role: p.role })),
       );
     }
+
+    // Monitoring templates carry a default injection matrix; the planner can edit it.
+    await seedSignalsFromTemplate(tx, drill.id, template?.scenario?.signals);
 
     await tx.insert(drillEvents).values({
       drillId: drill.id,

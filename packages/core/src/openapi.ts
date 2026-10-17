@@ -5,6 +5,7 @@ import { updateDrillInput } from "./drill-edits";
 import { drillEventInput } from "./drill-live";
 import { createDrillInput, scoreInput } from "./drill-writes";
 import { actionUpdateInput } from "./improvement-actions";
+import { signalMatrixInput } from "./signals";
 import { orgSettingsInput } from "./settings";
 import { webhookInput } from "./webhooks";
 
@@ -55,6 +56,9 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "PUT", path: "/drills/{id}", tag: "Drills", summary: "Replace a drill's details, objectives and participants", operationId: "updateDrill", body: updateDrillInput },
   { method: "DELETE", path: "/drills/{id}", tag: "Drills", summary: "Delete a drill and everything recorded for it", operationId: "deleteDrill" },
   { method: "POST", path: "/drills/{id}/events", tag: "Drills", summary: "Record a message, action, signal or observation", operationId: "recordDrillEvent", body: drillEventInput },
+  { method: "GET", path: "/drills/{id}/signals", tag: "Injection", summary: "The drill's injection matrix", operationId: "listDrillSignals", returns: "signals" },
+  { method: "PUT", path: "/drills/{id}/signals", tag: "Injection", summary: "Replace the injection matrix (planning/preparation only)", operationId: "replaceDrillSignals", body: z.object({ signals: signalMatrixInput }), returns: "signals" },
+  { method: "GET", path: "/drills/{id}/injection-plan", tag: "Injection", summary: "What will be injected: each stream in plain English, telemetry totals, run time", operationId: "getInjectionPlan" },
   { method: "POST", path: "/drills/{id}/rescore", tag: "Drills", summary: "Re-run auto-scoring for an ended drill", operationId: "rescoreDrill" },
   { method: "POST", path: "/drills/{id}/status", tag: "Drills", summary: "Change status (validated transition; scoring auto-scores)", operationId: "changeDrillStatus", body: statusInput },
   { method: "GET", path: "/drills/{id}/injects", tag: "Drills", summary: "List a drill's timed injects", operationId: "listDrillInjects", returns: "injects" },
