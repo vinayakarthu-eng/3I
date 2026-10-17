@@ -100,3 +100,21 @@ Set `DRILLFORCE_API_URL` (where the DrillForce web app runs, e.g. `http://localh
   webhooks fire, and the AAR can be generated
 
 The adapter only uses the public API and is fail-soft: if DrillForce is down the drill carries on.
+
+## The incident team (roles, skills and cadence)
+
+Each agent follows a written skill (`src/skills/index.js`) grounded in ICS and the PagerDuty
+incident-response guide:
+
+| Role | What it does in the channel |
+|---|---|
+| 🎖️ **Incident Commander** | Reacts 👀 instantly and replies **in the thread of every human message**, by name, with one question that moves the incident forward (who owns it, what you see, impact, next step, report-back time). Assigns owners with time boxes, runs decisions (“Are there any strong objections?” → Deputy risk check → explicit GO / no-go), moves the phase, and posts a status update **every 5 minutes** (state · done · in progress · pending/unowned · next update). |
+| 🛡️ **Deputy** | Logs every action with owner and due time, **chases overdue actions** by name (twice, 5 min apart, then escalates to the IC), risk-checks proposals, reports blast radius. |
+| 📢 **Comms** | Owned separately from the IC — a human can claim it (“I'll take comms”). **At T+10 asks: external comms (status page / customers) or internal only?**, recommends one from customer impact, drafts updates on every phase change and an exec line when leadership asks. |
+| 🔗 **Liaison** | **At T+5** asks whether support, vendors/dependency teams or leadership need to be engaged, and owns those conversations (e.g. payments vendor + Finance). |
+| 📝 **Scribe** | Posts the **milestone digest every 10 minutes** (phase changes, decisions, owners, open actions, pending), nudges the channel when it goes quiet, writes the after-action. |
+| 🔬 **SME** | Offers theories with confidence as signals land; confirms or questions findings. |
+
+Times are drill time (scaled by `DRILL_SPEED`). With `ANTHROPIC_API_KEY` set, the same roles write
+their messages with Claude (the skill is the system prompt; the incident state and transcript are the
+context); if a call fails the playbook text is used, so the drill never stalls.

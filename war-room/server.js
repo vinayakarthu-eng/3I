@@ -13,6 +13,7 @@ import { Orchestrator } from "./src/agents/orchestrator.js";
 import { SME } from "./src/agents/sme.js";
 import { Scribe } from "./src/agents/scribe.js";
 import { DrillForceAdapter } from "./src/adapters/drillforce-adapter.js";
+import { brainEnabled, brainModel } from "./src/agents/brain.js";
 import { WsAdapter } from "./src/adapters/ws-adapter.js";
 import { InjectEngine } from "./src/engine/inject-engine.js";
 import { SCENARIOS, findScenario } from "./src/engine/scenarios.js";
@@ -97,7 +98,7 @@ class WarRoom {
     });
     const injectEngine = new InjectEngine(scenario, speed, { onInject: (inj) => orchestrator.onInject(inj) });
     const timers = [
-      setInterval(() => orchestrator.statusCheck(), Math.max(15000, 60000 / speed)),
+      setInterval(() => orchestrator.tick(), 5000), // cadence engine: status, digest, comms, liaison, chasing
       setInterval(() => this.broadcast({ type: "status", status: state.snapshot() }), 1000),
     ];
     this.current = { state, orchestrator, injectEngine, timers };
@@ -255,6 +256,7 @@ function banner() {
   console.log(`  ▶  Dashboard:  http://localhost:${PORT}`);
   console.log(`  ▶  Scenarios:  ${SCENARIOS.map((s) => s.slug).join(", ")}`);
   console.log(`  ▶  Agents:     IC · Deputy · SME · Comms · Liaison · Scribe`);
+  console.log(`  ▶  Team:       ${brainEnabled() ? `Claude mode (${brainModel()})` : "playbook mode (set ANTHROPIC_API_KEY for Claude-written replies)"}`);
   const recorder = warRoom.adapters.find((a) => a.name === "drillforce");
   console.log(`  ▶  DrillForce: ${recorder ? `recording drills via ${recorder.root}` : "off (set DRILLFORCE_API_URL + DRILLFORCE_API_KEY)"}`);
   if (warRoom.mode === "simulator") {

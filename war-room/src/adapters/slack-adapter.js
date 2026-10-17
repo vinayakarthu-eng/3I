@@ -31,7 +31,9 @@ export class SlackAdapter extends BaseAdapter {
       if (!this.channel || message.channel !== this.channel.id) return;
       if (message.subtype || message.bot_id || message.user === this.botUserId) return;
       const name = await this._name(message.user);
-      this._deliverUser({ userId: message.user, name, text: message.text || "" });
+      // Instant acknowledgement (👀) — the IC's threaded reply follows.
+      this.client.reactions.add({ channel: message.channel, timestamp: message.ts, name: "eyes" }).catch(() => {});
+      this._deliverUser({ userId: message.user, name, text: message.text || "", ts: message.ts, threadTs: message.thread_ts });
     });
 
     this.app.command("/drill", async ({ command, ack, respond }) => {
@@ -101,7 +103,11 @@ export class SlackAdapter extends BaseAdapter {
     const prefix = message.kind === "inject" ? "⚠️ *INJECT:* " : "";
     const who = message.kind === "user" ? "" : `${message.emoji} *${message.name}:* `;
     const res = await this.client.chat
-      .postMessage({ channel: this.channel.id, text: `${prefix}${who}${message.text}` })
+      .postMessage({
+        channel: this.channel.id,
+        text: `${prefix}${who}${message.text}`,
+        ...(message.threadTs ? { thread_ts: message.threadTs } : {}),
+      })
       .catch((e) => {
         console.error("Slack postMessage failed:", e.data?.error ?? e.message);
         return null;
