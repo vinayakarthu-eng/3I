@@ -25,6 +25,9 @@ export const SLACK_BOT_SCOPES = [
 
 const slackApi = () => (process.env.SLACK_API_URL ?? "https://slack.com/api").replace(/\/+$/, "");
 
+// Every outbound call opts out of caching: Next.js caches server-side fetches (POSTs included)
+// on disk, which would store bot tokens in plain text and replay stale responses.
+
 /** What's missing for "Add to Slack" to work (empty when it's ready). */
 export function slackInstallMissingConfig(): string[] {
   const missing: string[] = [];
@@ -79,6 +82,7 @@ export async function completeSlackInstall(params: { code: string | null; state:
 
   const res = await fetch(`${slackApi()}/oauth.v2.access`, {
     method: "POST",
+    cache: "no-store",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: process.env.SLACK_CLIENT_ID!,
@@ -151,6 +155,7 @@ export async function disconnectSlack(ctx: Ctx) {
   try {
     await fetch(`${slackApi()}/auth.revoke`, {
       method: "POST",
+      cache: "no-store",
       headers: { authorization: `Bearer ${decryptSecret(row.botTokenEncrypted)}` },
     });
   } catch (err) {

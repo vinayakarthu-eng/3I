@@ -57,7 +57,8 @@ async function deliver(
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(webhook.url, { method: "POST", headers, body, signal: controller.signal });
+    // no-store: never let a framework fetch cache (Next.js) keep or replay deliveries.
+    const res = await fetch(webhook.url, { method: "POST", headers, body, signal: controller.signal, cache: "no-store" });
     clearTimeout(timeout);
     statusCode = res.status;
     success = res.ok;
