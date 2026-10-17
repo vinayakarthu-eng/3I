@@ -33,6 +33,22 @@ npm run dev               # web on http://localhost:3000 + bot + workers
 Without Slack tokens the bot exits with a warning and everything else keeps running. Without
 `ANTHROPIC_API_KEY` the IC bot uses scripted challenges and AARs come from a template generator.
 
+## Live demo mode
+
+```bash
+npm run demo                                         # database_failover, real time
+npm run demo -- --scenario credential_stuffing --speed 2
+npm run demo -- --no-drill                           # start everything, open drills yourself
+```
+
+One command runs the whole product for real: Postgres, the DrillForce web app (reused if it's
+already on :3000), and the [War Room](war-room/SETUP.md) with its own API key, recording into
+DrillForce. It opens a drill as a monitoring alert — in your real Slack workspace when
+`war-room/.env` has Slack tokens (the on-call list in `SLACK_ONCALL` is invited and paged),
+otherwise in the War Room's browser simulator. You play the responder; the agents react. When the
+incident resolves the drill is scored in DrillForce, ready for the AAR. Ctrl+C ends the drill
+properly and stops everything. Logs go to `.demo/`.
+
 ## API
 
 Everything the UI does is available over HTTP at `/api/v1` with an API key (Settings → API keys):
