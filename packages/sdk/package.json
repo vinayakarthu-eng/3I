@@ -1,0 +1,22 @@
+{
+  "name": "@drillforce/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "devDependencies": {
+    "@drillforce/core": "*",
+    "@drillforce/shared": "*",
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

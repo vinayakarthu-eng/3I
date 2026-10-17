@@ -52,7 +52,7 @@ const participantInput = z.object({
   name: z.string().trim().optional(),
   role: z.enum(PARTICIPANT_ROLES).default("responder"),
 });
-const createDrillInput = z.object({
+export const createDrillInput = z.object({
   name: z.string().trim().min(1).max(200),
   type: z.enum(DRILL_TYPES).optional(),
   description: z.string().trim().max(5000).optional(),
@@ -64,6 +64,7 @@ const createDrillInput = z.object({
   participants: z.array(participantInput).default([]),
 });
 export type CreateDrillInput = z.input<typeof createDrillInput>;
+export type ScoreInput = z.input<typeof scoreInput>;
 
 export async function createDrill(ctx: Ctx, raw: unknown): Promise<{ id: string }> {
   const parsed = createDrillInput.safeParse(raw);
@@ -274,13 +275,14 @@ export async function fireInject(ctx: Ctx, drillId: string, injectId: string) {
 }
 
 // ─── submit scores ────────────────────────────────────────────────────────────
-const scoreInput = z.array(
+export const scoreInput = z.array(
   z.object({
     objectiveId: z.string().uuid(),
     notes: z.string().max(5000).optional(),
     ratings: z
       .array(z.object({ dimension: z.string().min(1), rating: z.number().int().min(1), scale: z.number().int().min(2).max(10) }))
-      .optional(),
+      .optional()
+      .refine((rs) => !rs || rs.every((r) => r.rating <= r.scale), "Rating exceeds its scale"),
     verdict: z.enum(["correct", "partial", "incorrect"]).optional(),
   }),
 );

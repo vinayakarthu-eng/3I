@@ -334,6 +334,24 @@ looks identical to downstream subscribers.
   settings round-trip, AAR generate → 3 `action.created` deliveries, idempotent action create,
   double-approve rejected. `typecheck` 7/7.
 
+### Headless — OpenAPI spec + typed SDK (done)
+
+- **`packages/core/src/openapi.ts`** — one `ENDPOINTS` table describes all 31 operations;
+  `openApiDocument()` builds an OpenAPI 3.0 doc whose request bodies are generated from the same
+  zod schemas core validates with (`zod-to-json-schema`). Served publicly at
+  `GET /api/v1/openapi.json`; the discovery endpoint (`GET /api/v1`) is now generated from the
+  table too.
+- **Drift guards:** `npm test -w @drillforce/web` fails if a route handler isn't in `ENDPOINTS`
+  or vice versa (verified by adding a stray route); `npm test -w @drillforce/sdk` fails if an
+  endpoint has no SDK method.
+- **`packages/sdk`** — `DrillForce` client (`drills`, `reports`, `scenarios`, `competencies`,
+  `readiness`, `analytics`, `compliance`, `certifications`, `actions`, `webhooks`, `settings`)
+  with `DrillForceError { status, code, fieldErrors }`. Response types are
+  `Jsonify<ReturnType<core op>>` — exact, Dates as strings, no codegen. Runtime is plain `fetch`.
+- Core's `scoreInput` gained the UI's "rating ≤ scale" rule.
+- Verified: SDK unit tests 5/5, contract tests 3/3, and a live run of every SDK method against
+  the dev server (incl. 404 and 401 paths). `typecheck` 8/8.
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

@@ -7,7 +7,10 @@ export {
   changeDrillStatus,
   fireInject,
   submitScores,
+  createDrillInput,
+  scoreInput,
   type CreateDrillInput,
+  type ScoreInput,
 } from "./drill-writes";
 export { listScenarios, getScenario } from "./scenarios";
 export {
@@ -75,3 +78,4 @@ export {
   type OrgSettings,
   type OrgSettingsInput,
 } from "./settings";
+export { ENDPOINTS, openApiDocument, type Endpoint } from "./openapi";
