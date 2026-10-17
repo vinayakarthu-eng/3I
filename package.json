@@ -17,7 +17,7 @@
     "db:seed": "npm run db:seed -w @drillforce/db",
     "db:studio": "npm run db:studio -w @drillforce/db",
     "test": "turbo test",
-    "demo": "tsx scripts/live-demo.ts"
+    "demo": "tsx scripts/live-demo.mts"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
