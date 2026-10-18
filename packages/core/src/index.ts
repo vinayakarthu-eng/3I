@@ -155,3 +155,4 @@ export { warRoomConfigured } from "./war-room";
 export { scoringDelayMinutes } from "./drill-writes";
 export { signalRowToPlan } from "./signals";
 export type { DrillSignal, SignalStats } from "@drillforce/db";
+export { runDueScoring, judgeHeuristic } from "./scoring-agent";

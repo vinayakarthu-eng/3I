@@ -13,6 +13,7 @@
     "test": "tsx --test src/*.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@drillforce/db": "*",
     "@drillforce/report-generator": "*",
     "@drillforce/scoring-engine": "*",

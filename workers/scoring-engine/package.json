@@ -9,8 +9,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/worker.ts",
-    "start": "tsx src/worker.ts",
     "test": "tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

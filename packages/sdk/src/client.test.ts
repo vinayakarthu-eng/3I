@@ -33,6 +33,7 @@ test("every documented endpoint has an SDK method", async () => {
     df.drills.update(UUID, { name: "d", type: "tabletop", objectives: [], participants: [] }), df.drills.delete(UUID),
     df.drills.recordEvent(UUID, { type: "message", text: "hi" }), df.drills.rescore(UUID),
     df.drills.signals(UUID), df.drills.setSignals(UUID, []), df.drills.injectionPlan(UUID),
+    df.drills.schedule(UUID), df.drills.execute(UUID), df.drills.conclude(UUID), df.drills.complete(UUID),
     df.actions.update(UUID, {} as Parameters<typeof df.actions.update>[1]),
     df.drills.changeStatus(UUID, "active"), df.drills.injects(UUID), df.drills.fireInject(UUID, UUID),
     df.drills.submitScores(UUID, []), df.drills.report(UUID), df.drills.generateReport(UUID),

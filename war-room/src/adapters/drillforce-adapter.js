@@ -56,7 +56,14 @@ export class DrillForceAdapter extends BaseAdapter {
   async createChannel(name, topic, opts = {}) {
     const scenario = opts.scenario;
     this.drillId = null;
+    this.attached = false;
     this.channel = { id: name, name };
+    // DrillForce executed this drill: record into it (it already exists and is active).
+    if (opts.drillforceDrillId) {
+      this.drillId = opts.drillforceDrillId;
+      this.attached = true;
+      return this.channel;
+    }
     await this.enqueue("create drill", async () => {
       const templateId = TEMPLATE_FOR[scenario?.slug];
       const { id } = await this.request("POST", "/drills", {
@@ -109,6 +116,11 @@ export class DrillForceAdapter extends BaseAdapter {
       if (!this.drillId) return;
       const id = this.drillId;
       this.drillId = null;
+      if (this.attached) {
+        // The team resolved it in Slack: conclude the DrillForce drill (no-op if already concluded).
+        await this.request("POST", `/drills/${id}/conclude`).catch(() => {});
+        return;
+      }
       await this.request("POST", `/drills/${id}/status`, { status: "scoring" });
       console.log(`[drillforce] drill ${id} ended → ${this.webUrl}/drills/${id}?tab=scores`);
     });

@@ -53,6 +53,7 @@ export type DrillEvent = Data<typeof core.recordDrillEvent>;
 export type DrillSignal = Data<typeof core.listDrillSignals>[number];
 export type InjectionPlan = Data<typeof core.getInjectionPlan>;
 export type SignalPlanInput = core.SignalPlanInput;
+export type ExecutionRecord = Data<typeof core.executeDrill>;
 export type { DrillStatus, WebhookEvent };
 
 export interface ApiErrorBody {
@@ -130,6 +131,11 @@ export class DrillForce {
     /** Record a message/action/signal/observation; `actor` may be "bot", "agent:<name>" or "slack:<id>". */
     recordEvent: (id: string, event: DrillEventInput) =>
       this.request<DrillEvent>("POST", `/drills/${this.id(id)}/events`, event),
+    schedule: (id: string) => this.request<{ id: string; status: DrillStatus }>("POST", `/drills/${this.id(id)}/schedule`),
+    /** Start injection and open the Slack channel. */
+    execute: (id: string) => this.request<ExecutionRecord>("POST", `/drills/${this.id(id)}/execute`),
+    conclude: (id: string) => this.request<{ id: string; status: DrillStatus }>("POST", `/drills/${this.id(id)}/conclude`),
+    complete: (id: string) => this.request<{ id: string; status: DrillStatus }>("POST", `/drills/${this.id(id)}/complete`),
     signals: async (id: string) =>
       (await this.request<{ signals: DrillSignal[] }>("GET", `/drills/${this.id(id)}/signals`)).signals,
     setSignals: async (id: string, signals: SignalPlanInput[]) =>

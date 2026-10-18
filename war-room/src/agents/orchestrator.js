@@ -37,6 +37,8 @@ export class Orchestrator {
   /** Have `role` post `out` ({ text, job, thread }) — composed by Claude when enabled. */
   async speak(role, out, cause = {}) {
     if (!out?.text) return null;
+    // Once the drill is concluded only the Scribe's close-out goes out (drop queued chatter).
+    if ((this.state.concluding || this.state.closed) && role !== "scribe") return null;
     const m = ROLES[role];
     const text = brainEnabled() ? await compose(role, out.job ?? "Say this in your own words.", this._context(cause), out.text) : out.text;
     const message = {

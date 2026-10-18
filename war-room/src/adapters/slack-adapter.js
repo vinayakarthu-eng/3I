@@ -56,6 +56,7 @@ export class SlackAdapter extends BaseAdapter {
     await this.app.start();
     const auth = await this.client.auth.test();
     this.botUserId = auth.user_id;
+    this.teamId = auth.team_id;
     return auth;
   }
 

@@ -23,7 +23,8 @@ function cite(e: DrillEvent, startedAt: Date | null) {
 /** Human-authored messages/actions (not the bot or system). */
 export function humanEvents(events: DrillEvent[]) {
   return events.filter(
-    (e) => (e.eventType === "message" || e.eventType === "action") && e.actor && !SYSTEM_ACTORS.has(e.actor),
+    // Simulated team members (War Room "agent:*", the scoring "agent") are not responders.
+    (e) => (e.eventType === "message" || e.eventType === "action") && e.actor && !SYSTEM_ACTORS.has(e.actor) && !e.actor.startsWith("agent"),
   );
 }
 

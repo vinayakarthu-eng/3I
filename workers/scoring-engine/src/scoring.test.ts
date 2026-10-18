@@ -86,3 +86,14 @@ test("quality normalizes ratings by scale", () => {
   ]);
   assert.equal(r.normalizedScore, 70);
 });
+
+test("simulated War Room agents don't count as responders", () => {
+  const start = new Date("2026-01-01T10:00:00Z");
+  const at = (min: number) => new Date(start.getTime() + min * 60_000);
+  const events = [
+    { id: "1", drillId: "d", eventType: "signal", actor: "agent:scenario-control", channel: null, payload: { text: "DB down" }, occurredAt: at(0) },
+    { id: "2", drillId: "d", eventType: "message", actor: "agent:ic", channel: null, payload: { text: "I'm IC, confirm primary down, promote replica" }, occurredAt: at(0.2) },
+  ] as Parameters<typeof scoreTimeToAction>[0];
+  assert.equal(scoreTimeToAction(events, { max_minutes: 3 }, { responderIds: new Set(), startedAt: start }).normalizedScore, 0);
+  assert.equal(scoreCompleteness(events, { checklist: ["Confirm primary down", "Promote replica"] }, { startedAt: start }).normalizedScore, 0);
+});

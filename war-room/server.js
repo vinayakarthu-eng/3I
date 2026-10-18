@@ -71,9 +71,9 @@ class WarRoom {
     return { ic: new IC(), deputy: new Deputy(), sme: new SME(), comms: new Comms(), liaison: new Liaison(), scribe: new Scribe() };
   }
 
-  async start(slug, speed = DEFAULT_SPEED, { invite = [], alert = null } = {}) {
+  async start(slugOrScenario, speed = DEFAULT_SPEED, { invite = [], alert = null, drillforce = null } = {}) {
     await this.stop();
-    const scenario = findScenario(slug) || SCENARIOS[0];
+    const scenario = typeof slugOrScenario === "object" ? slugOrScenario : findScenario(slugOrScenario) || SCENARIOS[0];
     this.history = [];
     const state = new DrillState(scenario, speed);
     state.alert = alert;
@@ -82,7 +82,7 @@ class WarRoom {
 
     for (const a of this.adapters) {
       try {
-        await a.createChannel(state.channelName, topic, { invite, scenario });
+        await a.createChannel(state.channelName, topic, { invite, scenario, drillforceDrillId: drillforce?.drillId });
       } catch (err) {
         console.error(`[${a.name}] createChannel failed:`, err.message);
       }
@@ -101,10 +101,17 @@ class WarRoom {
       setInterval(() => orchestrator.tick(), 5000), // cadence engine: status, digest, comms, liaison, chasing
       setInterval(() => this.broadcast({ type: "status", status: state.snapshot() }), 1000),
     ];
-    this.current = { state, orchestrator, injectEngine, timers };
+    this.current = { state, orchestrator, injectEngine, timers, drillforce };
 
     this.broadcast({ type: "drill_start", status: state.snapshot() });
     await this.pageResponders(state, alert);
+    if (drillforce?.briefing) {
+      const links = Object.entries(drillforce.links ?? {}).map(([label, url]) => `<${url}|${label}>`);
+      const text = [drillforce.briefing, links.length ? `*Investigate in:* ${links.join(" · ")}` : "", drillforce.webUrl ? `Drill in DrillForce: ${drillforce.webUrl}` : ""]
+        .filter(Boolean)
+        .join("\n");
+      await this.send({ role: null, name: "DrillForce", emoji: "🧾", color: "#a78bfa", text, kind: "system" });
+    }
     orchestrator.declare(); // fire — has built-in delays
     injectEngine.start();
     return state.snapshot();
@@ -119,6 +126,42 @@ class WarRoom {
       `:pager: Paging responders: 🎖️ IC · 🛡️ Deputy · 🔬 SME · 📢 Comms · 🔗 Liaison · 📝 Scribe — engaging now.${oncall}`,
     ].join("\n");
     await this.send({ role: null, name: "Incident Response", emoji: "📟", color: "#f59e0b", text, kind: "system" });
+  }
+
+  /** DrillForce executed a drill: run its incident (its own alerts/services) and record into that drill. */
+  async startFromDrillForce(req) {
+    const severity = /^SEV[123]$/.test(req.severity) ? req.severity : "SEV2";
+    const scenario = {
+      slug: "drillforce",
+      title: req.title,
+      severity,
+      domain: req.domain === "db" ? "db" : "infra",
+      summary: req.summary,
+      paymentsAffected: (req.injects ?? []).some((i) => /payment|checkout/i.test(i.text)),
+      services: req.services?.length ? req.services : [{ name: "Application", status: "healthy" }],
+      injects: (req.injects ?? []).map((i) => ({ atMin: Number(i.atMin) || 0, type: i.type ?? "metric", text: i.text, severity: i.severity, affects: i.affects })),
+    };
+    const snap = await this.start(scenario, 1, { invite: ONCALL, alert: { title: req.title }, drillforce: { drillId: req.drillId, briefing: req.briefing, links: req.links, webUrl: req.webUrl } });
+    const slack = this.adapters.find((a) => a.name === "slack");
+    const channel = slack?.channel;
+    return {
+      channelId: channel?.id ?? null,
+      channelName: channel?.name ?? snap.channelName,
+      teamId: slack?.teamId ?? null,
+      url: channel && slack?.teamId ? `https://app.slack.com/client/${slack.teamId}/${channel.id}` : null,
+      mode: this.mode,
+    };
+  }
+
+  /** DrillForce concluded the drill: say so in the channel, then close out. */
+  async concludeDrillForce(drillId, message) {
+    const cur = this.current;
+    if (!cur || cur.drillforce?.drillId !== drillId) return false;
+    cur.state.concluding = true;
+    await this.send({ role: null, name: "DrillForce", emoji: "🏁", color: "#22c55e", text: message || "*This was a drill. The drill has now concluded.*", kind: "system" });
+    // Don't wait: if the team just resolved it, the close-out may already be running.
+    if (!cur.state.closed) void this.stop();
+    return true;
   }
 
   async startFromAlert(alert = {}) {
@@ -138,6 +181,7 @@ class WarRoom {
   async stop() {
     if (!this.current) return;
     const { timers, injectEngine, orchestrator, state } = this.current;
+    state.concluding = true;
     timers.forEach(clearInterval);
     injectEngine.stop();
     if (!state.closed) await orchestrator.afterAction();
@@ -189,6 +233,25 @@ app.post("/api/drill/start", async (req, res) => {
 app.post("/api/drill/stop", async (_req, res) => {
   await warRoom.stop();
   res.json({ ok: true });
+});
+
+// DrillForce integration (shared secret WAR_ROOM_TOKEN): DrillForce executes / concludes drills here.
+const requireDrillForce = (req, res, next) => {
+  const token = process.env.WAR_ROOM_TOKEN;
+  if (!token || req.headers.authorization !== `Bearer ${token}`) return res.status(401).json({ error: "unauthorized" });
+  next();
+};
+app.post("/api/drillforce/incidents", requireDrillForce, async (req, res) => {
+  try {
+    res.status(201).json(await warRoom.startFromDrillForce(req.body || {}));
+  } catch (err) {
+    console.error("[drillforce] open incident failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post("/api/drillforce/incidents/:drillId/conclude", requireDrillForce, async (req, res) => {
+  const done = await warRoom.concludeDrillForce(req.params.drillId, req.body?.message);
+  res.status(done ? 200 : 404).json(done ? { ok: true } : { error: "no active incident for that drill" });
 });
 
 // Alert webhook: a monitoring alert fires → create the incident channel + page responders.
