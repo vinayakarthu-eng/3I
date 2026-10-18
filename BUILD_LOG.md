@@ -416,6 +416,31 @@ Each org now connects its own Slack workspace; one bot process serves them all.
   fallback (5); simulator; bot boots to the Slack handshake. `typecheck` 8/8, tests 7+5+5+4, lint,
   `next build`. Not tested against a real Slack workspace.
 
+### Monitoring drills: lifecycle, injection engine, War Room team, scoring agent (done)
+
+From live testing feedback:
+- **War Room team** (`war-room/src/skills`, ICS + PagerDuty IR): the IC reacts 👀 and replies in the
+  thread of every human message with a meaningful question, remembers what's been answered (fixed a
+  live loop where it re-asked “customer impact” 8×), follows direction (“move on to mitigation”),
+  handles blockers, runs proposal → objections → Deputy risk check → GO. Cadence: IC status every
+  5 min, Liaison stakeholder check T+5, Comms internal-vs-external at T+10 (owned by a different
+  person), Scribe milestone digest every 10 min, Deputy chases then escalates overdue actions.
+  Claude mode with `ANTHROPIC_API_KEY`.
+- **Signal plans**: `shared/signals.ts` catalog; `drill_signals` (migration 0012); Application and
+  Database Monitoring templates with default matrices; `npm run db:templates`.
+- **Lifecycle UI**: stepper, next step per stage, ✓ timestamps, Preparation review (“We are going to
+  inject…”), live Execution banner + Slack card + per-stream progress, Concluded countdown.
+- **Injection engine** (`workers/injection-engine`): OTel traces (checkout-api → payments-service →
+  postgres), metrics (histograms, counters, pool/lag gauges), correlated logs, Datadog events;
+  Datadog Agent via `docker compose --profile datadog`; dry run without `DD_API_KEY`.
+- **Execute / Conclude**: War Room opens the incident for the drill (its alerts, services, briefing)
+  and records into it; Conclude posts “This was a drill. The drill has now concluded.”
+- **Scoring agent** (`workers/scoring-agent`): scores after `SCORING_DELAY_MINUTES` (default 15);
+  old instant scorer retired; simulated agents no longer count as responders.
+- **API**: signals, injection plan, schedule/execute/conclude/complete — in the spec and SDK.
+- **Verified**: engine unit tests (5), War Room team (15) + transcript replay (10), API/UI end to end,
+  browser check of each stage. Not yet verified against a real Datadog account (no key).
+
 ### Summary
 
 - **10 phases complete.** New top-level pages: `/scenarios`, `/readiness` (+`/[userId]`),

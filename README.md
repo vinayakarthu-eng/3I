@@ -10,7 +10,9 @@ tracked improvement actions.
 | --- | --- |
 | `apps/web` | Next.js 14 (App Router), Tailwind, shadcn/ui, Recharts — the DrillForce UI |
 | `apps/slack-bot` | Slack Bolt (socket mode) IC bot: `/drillforce start\|status\|inject\|end` — see its [README](apps/slack-bot/README.md) |
-| `workers/scoring-engine` | Auto-scores drills in *Scoring* from their events; computes the composite |
+| `workers/injection-engine` | Turns each executing drill's injection matrix into real OpenTelemetry traces, metrics, logs and Datadog events |
+| `workers/scoring-agent` | Scores drills after the post-drill window: auto objectives + judgement objectives (Claude or heuristic) |
+| `workers/scoring-engine` | The scoring library (time-to-action, completeness, coordination, quality, accuracy, composite) |
 | `workers/report-generator` | Generates After-Action Reports for drills in *Debriefing* (Claude, or a template without an API key) |
 | `packages/core` | The domain layer — every read and write, org-scoped by `Ctx`. The web app, the `/api/v1` API and the Slack bot all go through it |
 | `packages/sdk` | Typed client for `/api/v1` — see its [README](packages/sdk/README.md) |
@@ -36,18 +38,37 @@ Without Slack tokens the bot exits with a warning and everything else keeps runn
 ## Live demo mode
 
 ```bash
-npm run demo                                         # database_failover, real time
-npm run demo -- --scenario credential_stuffing --speed 2
-npm run demo -- --no-drill                           # start everything, open drills yourself
+npm run demo                         # Database Monitoring drill
+npm run demo -- --template app       # Application Monitoring drill
+npm run demo -- --scoring-delay 2    # score 2 min after concluding (default 15)
 ```
 
-One command runs the whole product for real: Postgres, the DrillForce web app (reused if it's
-already on :3000), and the [War Room](war-room/SETUP.md) with its own API key, recording into
-DrillForce. It opens a drill as a monitoring alert — in your real Slack workspace when
-`war-room/.env` has Slack tokens (the on-call list in `SLACK_ONCALL` is invited and paged),
-otherwise in the War Room's browser simulator. You play the responder; the agents react. When the
-incident resolves the drill is scored in DrillForce, ready for the AAR. Ctrl+C ends the drill
-properly and stops everything. Logs go to `.demo/`.
+One command runs the whole lifecycle for real: Postgres, the web app, the **injection engine**, the
+**scoring agent** and the [War Room](war-room/SETUP.md) (your real Slack workspace when
+`war-room/.env` has tokens, otherwise its browser simulator). It creates a monitoring drill that's
+already in **Preparation**; open it, review what will be injected and click **Execute**. Ctrl+C
+concludes a running drill and stops everything. Logs go to `.demo/`.
+
+## The drill lifecycle
+
+**Planning → Preparation → Execution → Concluded → Scored → Completed**, shown as a stepper on every
+drill with one clear next step per stage.
+
+1. **Planning** — objectives plus the **injection matrix** (Injection tab): per stream the signal
+   (HTTP errors, latency, error logs, DB query failures, pool exhaustion, slow queries, replica lag,
+   monitor alerts), target service, volume/min, failures/min, duration, start offset and pattern.
+   The Application Monitoring and Database Monitoring templates come with a matrix. *Schedule drill.*
+2. **Preparation** — “We are going to inject…”: every stream in plain English, expected telemetry,
+   destination and Slack. *Review & execute.*
+3. **Execution** — the injection engine generates real OpenTelemetry **traces, metrics, logs** and
+   Datadog **events** (to Datadog with `DD_API_KEY` + `docker compose --profile datadog up -d`,
+   otherwise a dry run that counts the same telemetry); the War Room opens the Slack incident channel,
+   invites on-call and its IC / Deputy / Comms / Liaison / Scribe team runs the incident. The page shows
+   the live banner, the Slack channel and per-stream progress. *Conclude drill.*
+4. **Concluded** — injection stops; Slack is told “This was a drill. The drill has now concluded.”
+5. **Scored** — `SCORING_DELAY_MINUTES` (default 15) later the scoring agent scores it: measurable
+   objectives automatically, judgement objectives from what responders said (Claude with
+   `ANTHROPIC_API_KEY`, else a heuristic), with its reasoning. *Open AAR → Complete.*
 
 ## API
 
