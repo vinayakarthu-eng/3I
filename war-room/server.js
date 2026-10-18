@@ -95,6 +95,18 @@ class WarRoom {
       send: (m, ex) => this.send(m, ex),
       speed,
       onClose: () => Promise.all(this.adapters.map((a) => a.closeChannel().catch(() => {}))),
+      // The IC decided the drill is over (e.g. a responder proved it's a drill).
+      onConcludeRequest: async (reason) => {
+        const recorder = this.adapters.find((a) => a.name === "drillforce");
+        if (drillforce?.drillId && recorder) {
+          // DrillForce concludes the drill and calls back /conclude, which posts the 🏁 message.
+          await recorder.request("POST", `/drills/${drillforce.drillId}/conclude`).catch((err) => console.warn("[drillforce] conclude failed:", err.message));
+          return;
+        }
+        state.concluding = true;
+        await this.send({ role: null, name: "Drill Control", emoji: "🏁", color: "#22c55e", text: `*This was a drill. The drill has now concluded.* (${reason})`, kind: "system" });
+        void this.stop();
+      },
     });
     const injectEngine = new InjectEngine(scenario, speed, { onInject: (inj) => orchestrator.onInject(inj) });
     const timers = [

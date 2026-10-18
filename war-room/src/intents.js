@@ -24,7 +24,8 @@ const rx = (s) => new RegExp(s, "i");
 const RULES = [
   // Direction to the IC wins over everything else.
   ["move_on", rx(String.raw`\b(move (?:past|on|forward)|focus(?:ing)? on (?:the )?(?:mitigat|fix)|start (?:the )?mitigat|let'?s (?:mitigate|fix it)|skip (?:this|that|it)|stop asking|hung (?:up )?on|stuck on|enough (?:on|about))`)],
-  ["drill_note", rx(String.raw`\b(it'?s a ?drill|this is a ?drill|just a drill)\b`)],
+  ["drill_note", rx(String.raw`\b(it'?s a ?drill|this is a ?drill|just a drill|is (?:this|it) a drill)\b`)],
+  ["dismiss", rx(String.raw`\b(false (?:alarm|positive)|not (?:relevant|real|an issue|a (?:real )?problem|our (?:problem|service))|irrelevant|ignore (?:it|this|the alert)|just noise|flaky (?:alert|monitor)|nothing to worry)`)],
   ["who_is_ic", rx(String.raw`\bwho(?:'s| is)?\s+(?:the\s+)?(?:ic|incident commander|in charge|running this|leading)\b`)],
   ["who_owns", rx(String.raw`\bwho(?:'s| is)?\s+(?:on|owning|handling|taking|looking at|investigating|doing)\b`)],
   ["sitrep", rx(String.raw`\b(sitrep|status\??$|where are we|where do we stand|what'?s (?:the )?status|catch me up|update\?)`)],
@@ -43,6 +44,15 @@ const RULES = [
   ["stakeholder", rx(String.raw`\b(support|ceo|exec|leadership|vendor|finance|legal|sales)\b`)],
   ["greeting", rx(String.raw`^(hi|hey|hello|joining|here|i'?m here|on the call)\b`)],
 ];
+
+/** Evidence that the incident is a drill (tags, synthetic traffic, the DrillForce briefing). */
+export const DRILL_EVIDENCE = rx(String.raw`\b(env:drill|drill_id|tagged|tags? (?:say|show)|synthetic|injected|drillforce|briefing (?:says|said)|the briefing|channel (?:says|topic)|confirmed (?:with|by)|evidence|proof|dashboard shows drill)`);
+
+/** A finding inside an "I'm investigating" message: "…, I see X", "found X", "looks like X". */
+export function findingIn(text) {
+  const m = /\b(?:i see|i'?m seeing|seeing|found|noticed|looks like|it'?s showing|shows)\b[:,]?\s*(.+)/i.exec(text);
+  return m ? m[1].replace(/[.!]+$/, "").trim() : null;
+}
 
 /** { intent, function?, question } for a responder message. */
 export function classify(raw) {

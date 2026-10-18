@@ -51,7 +51,8 @@ export class Deputy extends BaseAgent {
     // Each overdue action is chased at most twice (5 min apart), then escalated to the IC once.
     if (event.type === "chase") {
       const now = state.drillMs();
-      const overdue = state.openTasks().filter((t) => !t.escalated && t.dueAt <= now && now - t.chasedAt >= 5 * 60_000);
+      // The IC touches base first at the ETA; the Deputy follows up only after that check-in.
+      const overdue = state.openTasks().filter((t) => t.checkedIn && !t.escalated && t.dueAt + 2 * 60_000 <= now && now - t.chasedAt >= 5 * 60_000);
       if (!overdue.length) return null;
       const chase = overdue.filter((t) => (t.chases ?? 0) < 2);
       const escalate = overdue.filter((t) => (t.chases ?? 0) >= 2);

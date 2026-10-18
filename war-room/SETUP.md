@@ -118,3 +118,24 @@ incident-response guide:
 Times are drill time (scaled by `DRILL_SPEED`). With `ANTHROPIC_API_KEY` set, the same roles write
 their messages with Claude (the skill is the system prompt; the incident state and transcript are the
 context); if a call fails the playbook text is used, so the drill never stalls.
+
+### AI mode — a natural-language Incident Commander
+
+With `ANTHROPIC_API_KEY` in `war-room/.env`, the IC runs in **AI mode**: Claude reads the whole
+incident (responders, alerts, recorded facts, owners/ETAs, its own recent replies) and **decides** the
+reply and the actions — assign a role, set an ETA, record a finding/impact/theory, change phase,
+propose a mitigation and request the Deputy's risk check, or conclude the drill. Actions update the
+same shared state the rest of the team uses. Any failure falls back to the playbook.
+
+Both modes follow these response patterns:
+
+| Responder says | IC |
+|---|---|
+| “I'm investigating” | “Thank you — I'll come back to you. ETA 5 minutes; we'll touch base at T+05.” — and touches base at T+05 |
+| “I'm investigating, I see X” | “OK — noted: X. Let me know the next steps.” |
+| “False alarm / not relevant” | Pushes back with evidence (services down, latest signal, reported impact) |
+| “It's a drill” + evidence (env:drill tags, the briefing, data) | “Yes — confirmed, it's a drill” → concludes the drill |
+| “It's a drill” without evidence | “Until we can prove it, we run it as real — what shows it's a drill?” |
+| A question | Answered from what the team knows, then one useful question |
+
+It never repeats a question or asks for something already established.

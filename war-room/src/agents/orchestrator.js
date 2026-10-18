@@ -1,6 +1,6 @@
 import { ROLES } from "../roles.js";
 import { SEVERITIES } from "../state.js";
-import { brainEnabled, compose } from "./brain.js";
+import { brainEnabled, compose, icDecide } from "./brain.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 const MAX_DEPTH = 2; // agent → agent reaction waves (proposal → risk check → go/no-go)
@@ -11,7 +11,7 @@ const CADENCE = {
   digestEveryMin: 10, // Scribe milestone digest
   liaisonAtMin: 5, // Liaison stakeholder check
   commsDecisionAtMin: 10, // Comms: internal vs external
-  chaseEveryMin: 1, // Deputy looks for overdue actions (re-chases each after 3 min)
+  chaseEveryMin: 1, // IC touches base at ETAs; Deputy follows up on missed check-ins
   quietAfterMin: 4, // Scribe nudges a quiet channel
 };
 
@@ -22,8 +22,9 @@ const CADENCE = {
  * chasing overdue actions). In Claude mode each message is written by `compose`.
  */
 export class Orchestrator {
-  constructor({ state, agents, send, speed, onClose }) {
+  constructor({ state, agents, send, speed, onClose, onConcludeRequest }) {
     this.state = state;
+    this.onConcludeRequest = onConcludeRequest; // the IC decided the drill is over (e.g. proven to be a drill)
     this.agents = agents;
     this.send = send; // (message, exceptAdapter?) => Promise
     this.speed = Math.max(1, speed || 1);
@@ -40,7 +41,8 @@ export class Orchestrator {
     // Once the drill is concluded only the Scribe's close-out goes out (drop queued chatter).
     if ((this.state.concluding || this.state.closed) && role !== "scribe") return null;
     const m = ROLES[role];
-    const text = brainEnabled() ? await compose(role, out.job ?? "Say this in your own words.", this._context(cause), out.text) : out.text;
+    // AI-mode decisions are already Claude's words; playbook text is reworded by Claude when enabled.
+    const text = brainEnabled() && !out.ai ? await compose(role, out.job ?? "Say this in your own words.", this._context(cause), out.text) : out.text;
     const message = {
       role,
       name: m.name,
@@ -55,8 +57,27 @@ export class Orchestrator {
     return message;
   }
 
+  /** AI mode: Claude decides the IC's reply + actions (null → playbook). */
+  async _aiDecide(event, user) {
+    if (!brainEnabled()) return null;
+    const s = this.state;
+    const recentReplies = s.events
+      .filter((e) => e.role === "ic")
+      .slice(-6)
+      .map((e) => `- ${e.text}`)
+      .join("\n");
+    const context = [
+      this._context(),
+      `Recorded facts: impact=${s.facts.impact ?? "unknown"}; investigator=${s.facts.investigator ?? "none"}; theory=${s.facts.theory ?? "none"}; mitigation=${s.facts.mitigation ?? "none"}; findings=${(s.facts.findings ?? []).map((f) => `${f.by}: ${f.text}`).join(" | ") || "none"}; blockers=${s.facts.blockers.length}`,
+      `If you set a 5-minute ETA, the touch-base time is ${s.t(s.inMinutes(5)).slice(0, 7)}.`,
+      `Your recent replies (never repeat these questions):\n${recentReplies || "(none)"}`,
+    ].join("\n");
+    const decision = await icDecide(context, { name: event.name, text: event.text, mention: s.mention(event.name).startsWith("<@") ? s.mention(event.name) : null });
+    return decision ? this.agents.ic.applyAiDecision(s, event, decision) : null;
+  }
+
   /** Incident state + recent transcript, for Claude mode. */
-  _context(cause) {
+  _context(cause = {}) {
     const s = this.state;
     const transcript = s.events
       .slice(-15)
@@ -139,15 +160,21 @@ export class Orchestrator {
     return this._queue(async () => {
       await this.emitUser(user, exceptAdapter);
       await sleep(Math.min(ROLES.ic.delay, 1500)); // quick acknowledgement
-      const ack = await this.speak("ic", this.agents.ic.decide(event, this.state), event);
+      // AI mode decides when available; any failure falls back to the playbook so nobody is left unanswered.
+      const decision = (await this._aiDecide(event, user).catch((err) => (console.warn("[ai] IC fell back:", err.message), null))) ?? this.agents.ic.decide(event, this.state);
+      const ack = await this.speak("ic", decision, event);
       this._checkPhase();
+      if (decision?.conclude) {
+        await this.onConcludeRequest?.(decision.conclude);
+        return;
+      }
       for (const role of ["deputy", "comms", "liaison", "sme"]) {
         const out = this.agents[role].decide(event, this.state);
         if (!out) continue;
         await sleep(ROLES[role].delay / this.speed / 2);
         await this.speak(role, out, event);
       }
-      if (ack) await this._react({ type: "agent", role: "ic", text: ack.text });
+      if (ack) await this._react({ type: "agent", role: "ic", text: decision?.riskCheck ? `${ack.text} — risk check` : ack.text });
       await this._phaseFanout();
     });
   }
@@ -195,6 +222,7 @@ export class Orchestrator {
     }
     if (min - c.lastChaseAt / 60_000 >= CADENCE.chaseEveryMin) {
       c.lastChaseAt = s.drillMs();
+      due.push(["ic", { type: "checkin" }]);
       due.push(["deputy", { type: "chase" }]);
     }
     const quietFor = (s.drillMs() - Math.max(c.lastHumanAt, this.lastQuietNudgeAt)) / 60_000;

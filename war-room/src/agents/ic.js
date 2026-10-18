@@ -1,4 +1,4 @@
-import { classify } from "../intents.js";
+import { classify, DRILL_EVIDENCE, findingIn } from "../intents.js";
 import { SEVERITIES } from "../state.js";
 import { BaseAgent } from "./base-agent.js";
 
@@ -21,6 +21,8 @@ export class IC extends BaseAgent {
         return this._onHuman(event, state);
       case "status_update":
         return this._statusUpdate(state);
+      case "checkin":
+        return this._checkIn(state);
       case "sitrep":
         return { text: this._sitrep(state), job: "Post a crisp situation report." };
       case "inject":
@@ -88,18 +90,25 @@ export class IC extends BaseAgent {
           state.roles[fn && fn !== "comms" ? fn : "ops"] = event.name;
           state.milestone(`${event.name} investigating`);
         }
-        state.addTask(event.name, this._taskText(event.text, fn ?? "investigation"), 5);
-        state.asked.set("first_findings", state.drillMs());
+        const finding = findingIn(event.text);
+        if (finding) return this._finding(state, event, who, finding);
+        state.addTask(event.name, "investigation update", 5);
         return reply(
-          `Good, ${who} — you're on investigation. What are you seeing so far — which service, error rate, since when? Report back by *${due}* even if it's "nothing yet".`,
-          "Acknowledge they are investigating, ask what they see so far (service, error rate, start time), and set a report-back time.",
+          `Thank you, ${who} — I'll come back to you. You have an ETA of *5 minutes*; we'll touch base at *${due}*.`,
+          "Thank them, give a 5-minute ETA and say exactly when you'll touch base. Don't ask more questions now.",
         );
       }
-      case "observation":
+      case "dismiss":
         return reply(
-          `Noted, ${who}. ${this._next(state, event.name)}`,
-          "Acknowledge the observation and ask the next unanswered question.",
+          `No, ${who} — this is relevant. ${this._evidence(state)} Until we prove otherwise we treat it as real. What would show it's noise?`,
+          "Push back firmly but politely: it's relevant, cite the concrete evidence, and ask what would prove it's noise.",
         );
+      case "observation":
+        // A question ("anyone seeing errors?") gets an answer from what we know, not a "noted".
+        if (/\?\s*$/.test(event.text)) {
+          return reply(`${who} yes — ${this._evidence(state)} ${this._next(state, event.name)}`, "Answer the question from the incident state, then ask the next useful question.");
+        }
+        return this._finding(state, event, who, findingIn(event.text) ?? event.text);
       case "impact": {
         const first = !state.facts.impact;
         state.facts.impact ??= event.text;
@@ -114,9 +123,19 @@ export class IC extends BaseAgent {
       case "move_on":
         return this._moveToMitigation(state, event, who);
       case "drill_note":
+        if (DRILL_EVIDENCE.test(event.text)) {
+          state.milestone(`${event.name} confirmed it's a drill (with evidence) — IC concluding`);
+          return {
+            ...reply(
+              `Yes — confirmed, this is a drill (${event.name} has the evidence). Well spotted. *Concluding the drill now.*`,
+              "Confirm it's a drill because they provided evidence, thank them, and say you're concluding the drill.",
+            ),
+            conclude: `Confirmed as a drill by ${event.name}`,
+          };
+        }
         return reply(
-          `Yes — it's a drill, but we run it like the real thing. ${this._next(state, event.name)}`,
-          "Acknowledge it's a drill, keep the team in role, and give the next step.",
+          `It may be, ${who} — but until we can prove it, we run it as real. What evidence shows it's a drill?`,
+          "Push back: without evidence we treat it as real; ask what shows it's a drill.",
         );
       case "affirm":
         return reply(`Thanks ${who}. ${this._next(state, event.name)}`, "Acknowledge and ask the next unanswered question.");
@@ -183,6 +202,101 @@ export class IC extends BaseAgent {
           "Acknowledge the message and ask the single most useful next question for the incident.",
         );
     }
+  }
+
+  /**
+   * AI mode: apply the actions Claude decided on to the shared incident state (the same state the
+   * playbook uses, so status updates, digests, check-ins and go/no-go keep working).
+   */
+  applyAiDecision(state, event, decision) {
+    let conclude = null;
+    let riskCheck = false;
+    for (const a of decision.actions) {
+      const person = a.person && state.people.has(a.person) ? a.person : event.name;
+      switch (a.type) {
+        case "assign_role": {
+          const role = a.role || "ops";
+          state.roles[role] = person;
+          if (role === "comms") state.commsOwner = person;
+          else state.facts.investigator ??= person;
+          state.milestone(`${person} owns *${role}*`);
+          break;
+        }
+        case "set_eta":
+          state.facts.investigator ??= person;
+          state.addTask(person, a.text || "investigation update", Math.max(1, Math.min(60, a.minutes || 5)));
+          break;
+        case "record_finding":
+          (state.facts.findings ??= []).push({ by: person, text: a.text || event.text });
+          for (const t of state.openTasks(person)) if (t.text === "investigation update") t.status = "done";
+          state.milestone(`Finding (${person}): ${(a.text || event.text).slice(0, 80)}`);
+          break;
+        case "record_impact":
+          if (!state.facts.impact) state.milestone(`Impact: ${a.text || event.text}`);
+          state.facts.impact ??= a.text || event.text;
+          break;
+        case "record_theory":
+          state.facts.theory = a.text || event.text;
+          state.milestone(`Theory (${person}): ${(a.text || event.text).slice(0, 80)}`);
+          break;
+        case "set_phase":
+          if (a.phase) state.setPhase(a.phase);
+          break;
+        case "propose_mitigation":
+          state.facts.mitigation = a.text || this._fixFor(state);
+          if (!state.proposals.length) state.proposals.push({ by: person, text: state.facts.mitigation });
+          break;
+        case "request_risk_check":
+          riskCheck = true;
+          break;
+        case "conclude_drill":
+          conclude = a.text || `Concluded by the IC`;
+          state.milestone(`IC concluding the drill: ${conclude}`);
+          break;
+      }
+    }
+    state.lastIcReply = decision.reply;
+    return { text: decision.reply, thread: true, job: null, conclude, riskCheck, ai: true };
+  }
+
+  /** "I see X": capture the finding and ask for next steps. */
+  _finding(state, event, who, finding) {
+    state.facts.findings ??= [];
+    state.facts.findings.push({ by: event.name, text: finding });
+    state.milestone(`Finding (${event.name}): ${finding.slice(0, 80)}`);
+    for (const t of state.openTasks(event.name)) if (t.text === "investigation update") t.status = "done";
+    return {
+      thread: true,
+      job: "Capture the finding back to them in a few words, then ask what their next steps are.",
+      text: `OK — noted, ${who}: *${finding}*. Let me know the next steps — what will you do next?`,
+    };
+  }
+
+  /** Concrete evidence the incident is real, from the status board and recent signals. */
+  _evidence(state) {
+    const down = state.services.filter((s) => s.status === "down").map((s) => s.name);
+    const lastSignal = [...state.events].reverse().find((e) => e.kind === "inject");
+    return [
+      down.length ? `${down.join(", ")} ${down.length > 1 ? "are" : "is"} down.` : "",
+      lastSignal ? `Latest signal: “${lastSignal.text}”.` : "",
+      state.facts.impact ? `Impact reported: “${state.facts.impact}”.` : "",
+    ]
+      .filter(Boolean)
+      .join(" ") || "We have active alerts on this service.";
+  }
+
+  /** At an ETA, the IC touches base with the owner. */
+  _checkIn(state) {
+    const now = state.drillMs();
+    const due = state.openTasks().filter((t) => t.dueAt <= now && !t.checkedIn);
+    if (!due.length) return null;
+    for (const t of due) t.checkedIn = true;
+    return {
+      job: "Touch base with each owner whose ETA is up: by name, ask what they found and what's next.",
+      text: due
+        .map((t) => `${state.mention(t.owner)} — it's ${state.t().slice(0, 7)}, touching base as promised: what have you found, and what's next?`)
+        .join("\n"),
+    };
   }
 
   /** The responder told the IC to stop gathering and act: switch to mitigation with a concrete proposal. */
